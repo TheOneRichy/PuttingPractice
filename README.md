@@ -34,6 +34,8 @@ No accounts, no server, no build step. Data stays in your browser
 | `src/styles.css` | All styles (light + dark) |
 | `tests/` | `node:test` tests for `src/stats.js` |
 | `.github/workflows/ci.yml` | Runs the tests on every PR and push to `main` |
+| `vercel.json` | Cache headers for the deployed site |
+| `docs/` | Design notes written before a feature is built |
 
 Keep anything that can be tested without a browser in `src/stats.js`.
 
@@ -48,16 +50,38 @@ npm test         # node --test
 
 ## Deploying (Vercel)
 
-The site is plain static files, so Vercel needs no build settings.
+Live at **https://putt.richyarthurs.com**.
+
+The site is plain static files, so Vercel needs no build settings and there is
+no build step to configure. Deploys run through Vercel's Git integration: every
+push to `main` redeploys production and every pull request gets its own preview
+URL. Nothing needs to be run by hand, and there are no deploy tokens or GitHub
+secrets to keep working.
+
+### First-time setup
 
 1. In Vercel: **Add New… → Project → Import** `TheOneRichy/PuttingPractice`.
    Framework preset **Other**; leave build command and output directory empty.
-2. Deploy. Every push to `main` then redeploys production, and every PR
-   gets its own preview URL.
-3. Custom domain: **Project → Settings → Domains → Add** (e.g.
-   `putt.yourdomain.com`), then add the DNS record Vercel shows at your DNS
-   provider (a `CNAME` to `cname.vercel-dns.com` for a subdomain, or an `A`
-   record for an apex domain). HTTPS is issued automatically.
+2. Deploy, then confirm the `*.vercel.app` URL works.
+3. **Project → Settings → Domains → Add** `putt.richyarthurs.com`.
+4. At your DNS provider, add the record Vercel shows — a `CNAME` for
+   `putt` pointing at `cname.vercel-dns.com`. HTTPS is issued automatically
+   once the record resolves, usually within a few minutes.
+
+### `vercel.json`
+
+Only sets one thing: `Cache-Control: public, max-age=0, must-revalidate` on
+everything. Because there is no build step, filenames carry no content hash, so
+a cached `src/app.js` would keep serving old code after a deploy — on a phone
+with the app on the home screen, indefinitely. The files are a few KB and
+revalidation returns a `304`, so always checking costs effectively nothing and
+removes a whole class of "why is my fix not showing up" confusion.
+
+### CI
+
+`.github/workflows/ci.yml` runs `npm test` on every pull request and every push
+to `main`. It does not deploy; Vercel handles that on its own. Tests are not a
+gate on deployment, so a red build will still ship — check CI before merging.
 
 On your phone, open the site and use "Add to Home Screen" for an app-like
 experience.
