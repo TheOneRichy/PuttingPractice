@@ -209,7 +209,7 @@ test('Perfect Putt 360 scoring', () => {
   assert.equal(S.atFeet([{ results: res }], 10).makes, 19);
 });
 
-test('feedbackMailto addresses Richard and carries the message and details', () => {
+test('feedbackMailto addresses Richy and carries the message and details', () => {
   const link = S.feedbackMailto('  The chart is blank & 50% off\nsecond line ', '3 sessions logged, feet');
   const [to, query] = link.slice('mailto:'.length).split('?');
   assert.ok(link.startsWith('mailto:'));

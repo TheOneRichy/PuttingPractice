@@ -622,9 +622,9 @@ function feedbackPanel() {
   return `
     <section class="panel">
       <h3>Feedback</h3>
-      <p class="muted small">Found a bug, or want something added? This goes straight to Richard${S.FEEDBACK_KEY ? '' : '. Send opens your mail app with the message ready to go'}.</p>
+      <p class="muted small">Found a bug, or want something added? This goes straight to Richy${S.FEEDBACK_KEY ? '' : '. Send opens your mail app with the message ready to go'}.</p>
       <label class="field">Your message <textarea id="feedback" rows="4" placeholder="What happened, or what would make this better?"></textarea></label>
-      ${S.FEEDBACK_KEY ? '<label class="field">Your name <input id="feedback-name" autocomplete="name" placeholder="Optional, so Richard knows who to thank"></label>' : ''}
+      ${S.FEEDBACK_KEY ? '<label class="field">Your name <input id="feedback-name" autocomplete="name" placeholder="Optional, so Richy knows who to thank"></label>' : ''}
       <div class="actions-row"><button class="btn primary" data-action="feedback">Send feedback</button></div>
       <p class="muted small" id="feedback-fallback" ${S.FEEDBACK_KEY ? 'hidden' : ''}>${S.FEEDBACK_KEY ? 'That did not send. Check your connection and try again, or' : 'Nothing opened?'} <a id="feedback-mail" href="mailto:${S.FEEDBACK_EMAIL}">${S.FEEDBACK_KEY ? 'send it from your mail app' : S.FEEDBACK_EMAIL}</a>.</p>
     </section>`;
