@@ -218,3 +218,17 @@ export function expandStations(routine, putters) {
       ? { distance: s.distance, putts: (s.sets || 1) * p }
       : { distance: s.distance, putts: s.putts });
 }
+
+// ---- Standard distances ----------------------------------------------------
+// Every distance you can pick comes from these lists, so stats pile up at the
+// same marks instead of scattering across 17, 19, 22 ft... 10-30 ft in 5 ft
+// steps is the common practice ladder; 18 ft is the zone default; 33 ft (10 m)
+// is the edge of Circle 1 and 66 ft (20 m) the edge of Circle 2.
+export const STANDARD_FT = [10, 15, 18, 20, 25, 30, 33, 40, 50, 66];
+export const STANDARD_M = [3, 4, 5, 6, 7, 8, 9, 10, 15, 20];
+export const standardDistances = (unit) => (unit === 'm' ? STANDARD_M : STANDARD_FT);
+
+/** The standard distance closest to a value (same unit), for switching units. */
+export function nearestStandard(value, unit) {
+  return standardDistances(unit).reduce((best, d) => (Math.abs(d - value) < Math.abs(best - value) ? d : best));
+}

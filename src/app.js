@@ -53,7 +53,8 @@ function setsLine(sets) {
 }
 
 // ---- practice zone ---------------------------------------------------------
-const zoneFt = () => Number(state.settings.zoneFt) || 18;
+const zoneFt = () => (S.STANDARD_FT.includes(Number(state.settings.zoneFt)) ? Number(state.settings.zoneFt) : 18);
+const zoneSets = () => Math.min(30, Math.max(1, Number(state.settings.zoneSets) || 8));
 const zoneTarget = () => Number(state.settings.zoneTarget) || 85;
 const ZONE_MIN = 50; // putts before the app makes a call
 const ZONE_BAND = 5; // ± % around the target that counts as "in the zone"
@@ -68,9 +69,23 @@ const zoneMessages = {
 };
 const zoneTone = { 'in-zone': 'up', 'too-hard': 'down', 'too-easy': 'down' };
 
-/** Zone verdict at the focus distance, using the last 30 days when there are enough putts. */
-function zoneReport(sessions) {
-  const ft = zoneFt();
+const zoneShort = {
+  'need-more': (v) => `${v.needed} more putts`, 'in-zone': () => 'in the zone', 'too-hard': () => 'too hard',
+  'too-easy': () => 'too easy', 'leaning-hard': () => 'leaning hard', 'leaning-easy': () => 'leaning easy',
+};
+/** Dropdown of standard distances. Values are in the given unit. */
+const distanceSelect = (attrs, u, value) => {
+  const opts = S.standardDistances(u);
+  const extra = value !== '' && value != null && !opts.includes(Number(value)) ? [Number(value)] : []; // keep an old custom value
+  return `<select ${attrs}>${[...opts, ...extra].sort((a, b) => a - b)
+    .map((d) => `<option value="${d}" ${d === Number(value) ? 'selected' : ''}>${d} ${u}${extra.includes(d) ? ' (old)' : ''}</option>`)
+    .join('')}</select>`;
+};
+const zoneSelect = (id) => `<select id="${id}" aria-label="Zone distance">${S.STANDARD_FT
+  .map((d) => `<option value="${d}" ${d === zoneFt() ? 'selected' : ''}>${fmtDist(d)}</option>`).join('')}</select>`;
+
+/** Zone verdict at a distance (default: the zone distance), using the last 30 days when there are enough putts. */
+function zoneReport(sessions, ft = zoneFt()) {
   const opts = { target: zoneTarget(), band: ZONE_BAND, minAttempts: ZONE_MIN };
   const all = S.atFeet(sessions, ft);
   const recent = S.atFeet(S.sessionsSince(sessions, new Date(Date.now() - 30 * 864e5).toISOString()), ft);
@@ -132,6 +147,25 @@ function shell(active, body) {
     .join('')}</nav>`;
 }
 
+function zonePracticeCard() {
+  const p = puttersPref();
+  const z = zoneReport(state.sessions);
+  const status = z.all.attempts
+    ? `${fmtDist(z.ft)}: <strong>${fmtPct(z.v.pct)}</strong> over ${z.v.attempts} putts · <span class="${zoneTone[z.v.status] || ''}">${zoneShort[z.v.status](z.v)}</span>`
+    : `No putts at ${fmtDist(z.ft)} yet.`;
+  return `<div class="card accent">
+    <h3>Zone practice</h3>
+    <p class="muted small">Pick a standard distance and putt there. Stats build up per distance, so you can find where you make ${zoneTarget()}%.</p>
+    <div class="zone-pick">
+      <label class="field">Distance ${zoneSelect('zone-dist')}</label>
+      <label class="field">Sets <select id="zone-sets">${Array.from({ length: 30 }, (_, i) => i + 1)
+        .map((n) => `<option value="${n}" ${n === zoneSets() ? 'selected' : ''}>${n} (${n * p} putts)</option>`).join('')}</select></label>
+    </div>
+    <p class="small">${status}</p>
+    <button class="btn primary full" data-action="start-zone" ${state.active ? 'disabled' : ''}>Start ${zoneSets() * p} putts at ${fmtDist(zoneFt())}</button>
+  </div>`;
+}
+
 function viewPractice() {
   const resume = state.active
     ? `<div class="card accent"><strong>Session in progress</strong>
@@ -148,9 +182,10 @@ function viewPractice() {
       <div class="stat"><span class="num">${todayTot.a}</span><span class="lbl">putts today</span></div>
       <div class="stat"><span class="num">${todayTot.a ? fmtPct(S.pct(todayTot.m, todayTot.a)) : '–'}</span><span class="lbl">today</span></div>
     </section>
-    <h2>Start a routine</h2>
     <label class="field inline">Putters per set ${puttersSelect('putters-pref', puttersPref())}</label>
     <p class="muted small">Throw them all, walk up, then tap how many went in.</p>
+    ${zonePracticeCard()}
+    <h2>Start a routine</h2>
     <ul class="list">${state.routines
       .map((r) => `<li><button class="routine" data-action="start" data-id="${r.id}" ${state.active ? 'disabled' : ''}>
         <strong>${esc(r.name)}</strong><span class="muted small">${esc(routineSummary(r))}</span></button></li>`)
@@ -241,10 +276,14 @@ function viewFinish(a) {
           ? `<tr><td>${st.distance} ${a.unit}</td><td>${a.log[i].filter(Boolean).length}/${a.log[i].length}</td><td>${fmtPct(S.pct(a.log[i].filter(Boolean).length, a.log[i].length))}</td></tr>`
           : '')
         .join('')}</table>`;
-  const here = S.atFeet([{ results }], zoneFt());
+  // Zone check at the zone distance if putted, else the standard distance with the most putts.
+  const putted = S.STANDARD_FT.map((ft) => ({ ft, ...S.atFeet([{ results }], ft) })).filter((x) => x.attempts);
+  const checkFt = putted.some((x) => x.ft === zoneFt()) ? zoneFt()
+    : putted.sort((x, y) => y.attempts - x.attempts)[0]?.ft;
+  const here = checkFt ? S.atFeet([{ results }], checkFt) : { attempts: 0 };
   let zoneLine = '';
   if (here.attempts) {
-    const z = zoneReport([...state.sessions, { date: new Date().toISOString(), results }]);
+    const z = zoneReport([...state.sessions, { date: new Date().toISOString(), results }], checkFt);
     zoneLine = `<div class="card accent"><strong>${fmtDist(z.ft)} zone check</strong>
       <p class="small">This session: ${here.makes}/${here.attempts} (${fmtPct(here.pct)}). Including it, you are at
       <strong>${fmtPct(z.v.pct)}</strong> over ${z.v.attempts} putts${z.useRecent ? ' in the last 30 days' : ''}.</p>
@@ -283,7 +322,7 @@ function viewQuickLog() {
     </form>`);
 }
 const qlRow = () => `<tr>
-  <td><input type="number" name="d" min="1" step="1" required inputmode="numeric"></td>
+  <td>${distanceSelect('name="d" required', unit(), S.standardDistances(unit())[0])}</td>
   <td><input type="number" name="p" min="1" step="1" value="10" required inputmode="numeric"></td>
   <td><input type="number" name="m" min="0" step="1" required inputmode="numeric"></td>
   <td><button type="button" class="x" data-action="row-del" aria-label="Remove">×</button></td></tr>`;
@@ -334,8 +373,8 @@ function viewProgress() {
     : est.kind === 'beyond' ? `You are at ${target}%+ at every distance you have logged (out to ${fmtDist(est.ft)}). Log some putts further out to find your ${target}% distance.`
     : `You are under ${target}% at every distance you have logged (in to ${fmtDist(est.ft)}). Log some putts closer in to find your ${target}% distance.`;
   const zoneCard = `<div class="card accent">
-      <div class="hist-head"><h3>${target}% zone · ${fmtDist(z.ft)}</h3>
-        ${z.v.attempts ? `<span class="pct">${fmtPct(z.v.pct)}</span>` : ''}</div>
+      <div class="hist-head"><h3>${target}% zone at</h3>${zoneSelect('zone-view')}</div>
+      ${z.v.attempts ? `<p class="big-pct small-pct">${fmtPct(z.v.pct)}</p>` : ''}
       ${z.all.attempts ? `
         <p class="small">${z.v.attempts} putts${z.useRecent ? ' in the last 30 days' : ''} ·
           likely between <strong>${fmtPct(z.v.lo)}</strong> and <strong>${fmtPct(z.v.hi)}</strong> (95% range)</p>
@@ -346,13 +385,24 @@ function viewProgress() {
         </div>
         <p class="small ${zoneTone[z.v.status] || ''}">${zoneMessages[z.v.status](z.v)}</p>
         ${z.useRecent ? `<p class="muted small">All time: ${z.all.makes}/${z.all.attempts} (${fmtPct(z.all.pct)})</p>` : ''}`
-      : `<p class="small muted">No putts at ${fmtDist(z.ft)} yet. Run <strong>18 ft Zone Reps</strong> to start building the number.</p>`}
+      : `<p class="small muted">No putts at ${fmtDist(z.ft)} yet. Start <strong>Zone practice</strong> on the Practice screen to build the number.</p>`}
       ${estLine ? `<p class="small">${estLine}</p>` : ''}
     </div>`;
+  const stdRows = S.STANDARD_FT.map((ft) => ({ ft, r: zoneReport(all, ft) })).filter((x) => x.r.all.attempts);
+  const standardsCard = stdRows.length ? `<div class="card">
+      <h3>Standard distances</h3>
+      <p class="muted small">Make % with its 95% range, judged against ${target}% ± ${ZONE_BAND}. Last 30 days once there are ${ZONE_MIN}+ putts there.</p>
+      <table><tr><th>Dist</th><th>Make %</th><th>Range</th><th>Verdict</th></tr>${stdRows
+        .map(({ ft, r }) => `<tr class="${ft === z.ft ? 'on' : ''}"><td>${fmtDist(ft)}</td>
+          <td>${fmtPct(r.v.pct)} <span class="muted small">(${r.v.attempts})</span></td>
+          <td class="small">${fmtPct(r.v.lo)}–${fmtPct(r.v.hi)}</td>
+          <td class="small ${zoneTone[r.v.status] || 'muted'}">${zoneShort[r.v.status](r.v)}</td></tr>`).join('')}</table>
+    </div>` : '';
 
   return shell('progress', `
     <h2>Progress</h2>
     ${zoneCard}
+    ${standardsCard}
     <section class="stats-row four">
       <div class="stat"><span class="num">${all.length}</span><span class="lbl">sessions</span></div>
       <div class="stat"><span class="num">${overall.a}</span><span class="lbl">total putts</span></div>
@@ -413,14 +463,14 @@ function viewRoutineEdit() {
         <option value="putts" ${r.count !== 'sets' ? 'selected' : ''}>putts</option>
         <option value="sets" ${r.count === 'sets' ? 'selected' : ''}>sets of my putters</option></select></label>
       <table class="edit" id="st-rows"><tr><th>Distance</th><th id="st-count-head">${r.count === 'sets' ? 'Sets' : 'Putts'}</th><th></th></tr>
-        ${r.stations.map((s) => stRow({ distance: s.distance, putts: r.count === 'sets' ? s.sets : s.putts })).join('')}</table>
+        ${r.stations.map((s) => stRow({ distance: s.distance, putts: r.count === 'sets' ? s.sets : s.putts }, r.unit)).join('')}</table>
       <button type="button" class="btn ghost" data-action="st-add">+ Add station</button>
       <div class="row"><button class="btn primary" type="submit">Save routine</button>
       <button type="button" class="btn ghost" data-action="cancel-edit">Cancel</button></div>
     </form>`);
 }
-const stRow = (s = { distance: '', putts: 10 }) => `<tr>
-  <td><input type="number" name="d" min="1" step="1" value="${s.distance}" required inputmode="numeric"></td>
+const stRow = (s = { distance: '', putts: 2 }, u = 'ft') => `<tr>
+  <td>${distanceSelect('name="d" required', u, s.distance === '' ? S.standardDistances(u)[0] : s.distance)}</td>
   <td><input type="number" name="p" min="1" max="100" step="1" value="${s.putts}" required inputmode="numeric"></td>
   <td><button type="button" class="x" data-action="row-del" aria-label="Remove">×</button></td></tr>`;
 
@@ -434,9 +484,9 @@ function viewSettings() {
     </div>
     <div class="card">
       <h3>Practice zone</h3>
-      <p class="muted small">Practise where you make about ${zoneTarget()}% of your putts. Progress tracks your make % at this distance and tells you when to move in or back.</p>
-      <label class="field">Zone distance (ft) <input type="number" id="zone-ft" min="3" max="100" step="1" value="${zoneFt()}" inputmode="numeric"></label>
-      <label class="field">Target make % <input type="number" id="zone-target" min="50" max="99" step="1" value="${zoneTarget()}" inputmode="numeric"></label>
+      <p class="muted small">Practise where you make about ${zoneTarget()}% of your putts. Pick the distance on the Practice or Progress screen; stats are kept for every standard distance.</p>
+      <label class="field">Target make % <select id="zone-target">${[75, 80, 85, 90, 95]
+        .map((t) => `<option value="${t}" ${t === zoneTarget() ? 'selected' : ''}>${t}%</option>`).join('')}</select></label>
     </div>
     <div class="card">
       <h3>Backup</h3>
@@ -465,7 +515,10 @@ window.addEventListener('hashchange', render);
 // ---- actions ---------------------------------------------------------------
 function startRoutine(id) {
   const r = state.routines.find((x) => x.id === id);
-  if (!r) return;
+  if (r) startRoutineObj(r);
+}
+
+function startRoutineObj(r) {
   const putters = puttersPref();
   state.active = {
     routineId: r.id, routineName: r.name, kind: r.kind, unit: r.unit, startedAt: new Date().toISOString(),
@@ -549,7 +602,14 @@ const actions = {
     state.active = null; persist(); go('practice');
   },
   'ql-add': () => document.getElementById('ql-rows').insertAdjacentHTML('beforeend', qlRow()),
-  'st-add': () => document.getElementById('st-rows').insertAdjacentHTML('beforeend', stRow()),
+  'st-add': () => document.getElementById('st-rows')
+    .insertAdjacentHTML('beforeend', stRow({ distance: '', putts: document.getElementById('routine-count').value === 'sets' ? 2 : 10 },
+      document.querySelector('#routine-form [name=unit]').value)),
+  'start-zone': () => {
+    const ft = zoneFt();
+    startRoutineObj({ id: `zone-${ft}`, name: `Zone practice · ${ft} ft`, kind: 'stations', unit: 'ft', count: 'sets',
+      stations: [{ distance: ft, sets: zoneSets() }] });
+  },
   'row-del': (el) => {
     const table = el.closest('table');
     if (table.querySelectorAll('tr').length > 2) el.closest('tr').remove();
@@ -593,11 +653,17 @@ app.addEventListener('click', (e) => {
 
 app.addEventListener('change', (e) => {
   if (e.target.id === 'unit') { state.settings.unit = e.target.value; persist(); render(); }
-  if (e.target.id === 'zone-ft' || e.target.id === 'zone-target') {
-    const n = Math.round(Number(e.target.value));
-    const [key, min, max] = e.target.id === 'zone-ft' ? ['zoneFt', 3, 100] : ['zoneTarget', 50, 99];
-    if (n >= min && n <= max) { state.settings[key] = n; persist(); }
-    render();
+  if (e.target.id === 'zone-dist' || e.target.id === 'zone-view') { state.settings.zoneFt = Number(e.target.value); persist(); render(); }
+  if (e.target.id === 'zone-sets') { state.settings.zoneSets = Number(e.target.value); persist(); render(); }
+  if (e.target.id === 'zone-target') { state.settings.zoneTarget = Number(e.target.value); persist(); render(); }
+  if (e.target.name === 'unit' && e.target.closest('#routine-form')) {
+    // Switch every distance dropdown to the new unit's standards, keeping the nearest mark.
+    const to = e.target.value;
+    const from = to === 'm' ? 'ft' : 'm';
+    e.target.form.querySelectorAll('select[name=d]').forEach((sel) => {
+      const near = S.nearestStandard(S.fromFt(S.toFt(Number(sel.value), from), to), to);
+      sel.outerHTML = distanceSelect('name="d" required', to, near);
+    });
   }
   if (e.target.id === 'routine-count') {
     document.getElementById('st-count-head').textContent = e.target.value === 'sets' ? 'Sets' : 'Putts';

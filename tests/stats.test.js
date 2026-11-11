@@ -120,3 +120,12 @@ test('expandStations turns sets into putts using the putter count', () => {
   const putts = { stations: [{ distance: 10, putts: 10 }] };
   assert.deepEqual(S.expandStations(putts, 6), [{ distance: 10, putts: 10 }]);
 });
+
+test('standard distances: 18 ft default is listed, nearestStandard snaps', () => {
+  assert.ok(S.STANDARD_FT.includes(18) && S.STANDARD_FT.includes(33));
+  assert.deepEqual([...S.STANDARD_FT].sort((a, b) => a - b), S.STANDARD_FT);
+  assert.equal(S.nearestStandard(28, 'ft'), 30);
+  assert.equal(S.nearestStandard(17, 'ft'), 18);
+  assert.equal(S.nearestStandard(S.fromFt(18, 'm'), 'm'), 5);
+  assert.equal(S.nearestStandard(60, 'ft'), 66);
+});
