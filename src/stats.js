@@ -358,7 +358,7 @@ export function feedbackPayload(key, { message, name = '', details = '' }) {
  * PostHog project token: where anonymous usage events are sent. Like FEEDBACK_KEY it is a
  * public, write-only identifier, safe to commit. Leave it empty and nothing is loaded or sent.
  */
-export const ANALYTICS_KEY = '';
+export const ANALYTICS_KEY = 'phc_KxA7Ev83kLkS2bU0hvaOJ34Bbuifbgf1xN2Pix3gXQM';
 export const ANALYTICS_HOST = 'https://us.i.posthog.com';
 export const ANALYTICS_SCRIPT = 'https://us-assets.i.posthog.com/static/array.js';
 /** Only the live site reports, so local runs and preview deploys stay out of the numbers. */
