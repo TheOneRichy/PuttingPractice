@@ -208,3 +208,27 @@ test('Perfect Putt 360 scoring', () => {
   assert.deepEqual(res[6], { ft: 15, attempts: 10, makes: 7 });
   assert.equal(S.atFeet([{ results: res }], 10).makes, 19);
 });
+
+test('feedbackMailto addresses Richard and carries the message and details', () => {
+  const link = S.feedbackMailto('  The chart is blank & 50% off\nsecond line ', '3 sessions logged, feet');
+  const [to, query] = link.slice('mailto:'.length).split('?');
+  assert.ok(link.startsWith('mailto:'));
+  assert.equal(to, S.FEEDBACK_EMAIL);
+  assert.ok(!query.includes('+'));
+  const q = new URLSearchParams(query);
+  assert.equal(q.get('subject'), 'Putting Practice feedback');
+  assert.equal(q.get('body'), 'The chart is blank & 50% off\nsecond line\n\n--\n3 sessions logged, feet');
+  assert.ok(!S.feedbackMailto('hi').includes('--'));
+});
+
+test('feedbackPayload carries the key, the message with details, and the sender when given', () => {
+  const p = S.feedbackPayload('k', { message: ' Love it ', name: ' Sam ', details: '3 sessions logged, feet' });
+  assert.deepEqual(p, {
+    access_key: 'k', subject: 'Putting Practice feedback from Sam', from_name: 'Sam',
+    message: 'Love it\n\n--\n3 sessions logged, feet',
+  });
+  const anon = S.feedbackPayload('k', { message: 'hi' });
+  assert.equal(anon.subject, 'Putting Practice feedback');
+  assert.equal(anon.from_name, 'Putting Practice');
+  assert.equal(anon.message, 'hi');
+});

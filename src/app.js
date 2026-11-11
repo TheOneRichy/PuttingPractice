@@ -636,6 +636,14 @@ function viewSettings() {
       <label class="btn">Import backup<input type="file" id="import" accept="application/json" hidden></label></div>
     </section>
     <section class="panel">
+      <h3>Feedback</h3>
+      <p class="muted small">Found a bug, or want something added? This goes straight to Richard${S.FEEDBACK_KEY ? '' : '. Send opens your mail app with the message ready to go'}.</p>
+      <label class="field">Your message <textarea id="feedback" rows="4" placeholder="What happened, or what would make this better?"></textarea></label>
+      ${S.FEEDBACK_KEY ? '<label class="field">Your name <input id="feedback-name" autocomplete="name" placeholder="Optional, so Richard knows who to thank"></label>' : ''}
+      <div class="actions-row"><button class="btn primary" data-action="feedback">Send feedback</button></div>
+      <p class="muted small" id="feedback-fallback" ${S.FEEDBACK_KEY ? 'hidden' : ''}>${S.FEEDBACK_KEY ? 'That did not send. Check your connection and try again, or' : 'Nothing opened?'} <a id="feedback-mail" href="mailto:${S.FEEDBACK_EMAIL}">${S.FEEDBACK_KEY ? 'send it from your mail app' : S.FEEDBACK_EMAIL}</a>.</p>
+    </section>
+    <section class="panel">
       <h3>Start over</h3>
       <p class="muted small">Deletes every session and routine on this device.</p>
       <button class="btn ghost danger" data-action="wipe">Delete all data</button>
@@ -725,6 +733,34 @@ const actions = {
     const { key, value } = el.dataset;
     state.settings[key] = key === 'unit' ? value : Number(value);
     persist(); render();
+  },
+  feedback: async (el) => {
+    const box = document.getElementById('feedback');
+    if (!box.value.trim()) { toast('Write a message first.'); box.focus(); return; }
+    const details = `${plural(state.sessions.length, 'session')} logged, ${unit() === 'm' ? 'metres' : 'feet'}\n${navigator.userAgent}`;
+    const mailto = S.feedbackMailto(box.value, details);
+    if (!S.FEEDBACK_KEY) { location.href = mailto; return; }
+    const fallback = document.getElementById('feedback-fallback');
+    el.disabled = true; el.textContent = 'Sending…';
+    try {
+      const res = await fetch(S.FEEDBACK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(S.feedbackPayload(S.FEEDBACK_KEY, {
+          message: box.value, name: document.getElementById('feedback-name').value, details,
+        })),
+      });
+      if (!res.ok || !(await res.json()).success) throw new Error('not sent');
+      box.value = '';
+      fallback.hidden = true;
+      toast('Sent. Thanks!');
+    } catch {
+      // Keep the message, and offer the mail app with it filled in as a way out.
+      document.getElementById('feedback-mail').href = mailto;
+      fallback.hidden = false;
+      toast('Could not send that.');
+    }
+    el.disabled = false; el.textContent = 'Send feedback';
   },
   'pick-distance': (el) => { progressDistance = Number(el.dataset.d); render(); },
   putt: (el) => {
