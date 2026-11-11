@@ -219,6 +219,13 @@ textarea { min-height: 0; resize: vertical; }
 .pip.make { background: var(--make); }
 .pip.miss { background: none; box-shadow: inset 0 0 0 2.5px var(--miss); }
 .pip.now { background: none; box-shadow: inset 0 0 0 2px var(--ink); }
+/* Logged results are buttons: tap one to correct it. The hit area reaches past the mark. */
+button.slot, button.pip { border: 0; padding: 0; position: relative; }
+button.slot::after, button.pip::after { content: ""; position: absolute; inset: -8px -2px; }
+button.pip::after { inset: -14px -2px; }
+.slot.fix, .pip.fix { outline: 3px solid var(--ink); outline-offset: 2px; }
+.pad-q.fixing { display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--ink); }
+.icon-btn.undo { width: auto; display: flex; align-items: center; gap: 4px; padding: 0 12px; border-radius: 24px; font-size: .9rem; font-weight: 700; }
 .running { color: var(--muted); font-variant-numeric: tabular-nums; }
 .running strong { color: var(--ink); font-size: 1.15rem; }
 
@@ -230,7 +237,20 @@ textarea { min-height: 0; resize: vertical; }
   min-height: 64px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--surface);
   font-size: 1.6rem; font-weight: 800; font-variant-numeric: tabular-nums;
 }
-.key:active { filter: brightness(.9); transform: scale(.98); }
+.key:active { filter: brightness(.85); transform: scale(.93); }
+/* The pad is redrawn on every tap, so the press is replayed on the fresh key:
+   a squash, a bounce back and a ring that spreads out from it. */
+.key { --ring: var(--brand); transition: transform .08s ease-out, filter .08s ease-out; }
+.key.zero, .key.miss { --ring: var(--miss); }
+.key.all { --ring: var(--make); }
+.key.tapped { animation: key-tap .45s cubic-bezier(.2, .9, .3, 1.2); }
+@keyframes key-tap {
+  0% { transform: scale(.88); filter: brightness(.8); box-shadow: 0 0 0 0 color-mix(in srgb, var(--ring) 80%, transparent), inset 0 0 0 60px color-mix(in srgb, var(--ring) 40%, transparent); }
+  45% { transform: scale(1.05); filter: brightness(1.08); box-shadow: 0 0 0 9px color-mix(in srgb, var(--ring) 45%, transparent), inset 0 0 0 60px color-mix(in srgb, var(--ring) 20%, transparent); }
+  100% { transform: scale(1); filter: none; box-shadow: 0 0 0 18px transparent, inset 0 0 0 60px transparent; }
+}
+.slot.landed, .pip.landed { animation: tally-in .4s cubic-bezier(.2, .9, .3, 1.4); }
+@keyframes tally-in { from { transform: scale(.3); opacity: 0; } 60% { transform: scale(1.35); opacity: 1; } }
 .key.zero { color: var(--miss); }
 .key.all { min-height: 84px; background: var(--make); border-color: var(--make); color: #fff; }
 .key.miss { min-height: 120px; background: var(--miss); border-color: var(--miss); color: #fff; }
@@ -346,4 +366,37 @@ form .btn.ghost.small { align-self: flex-start; }
   max-width: calc(100% - 32px); text-align: center; z-index: 10; animation: toast-in .2s ease-out;
 }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+/* ---- tablets and wide windows ----
+   A live session fills the screen: the distance and tally on the left, the pad on the right,
+   everything big enough to hit from arm's length. Other pages just get a roomier column. */
+@media (min-width: 800px) {
+  .top, main { max-width: 760px; }
+}
+@media (min-width: 800px) and (orientation: landscape) {
+  .focus {
+    max-width: 1180px; padding-left: max(28px, env(safe-area-inset-left)); padding-right: max(28px, env(safe-area-inset-right));
+    display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto 1fr auto; column-gap: 40px;
+    grid-template-areas: "bar bar" "seg seg" "top pad" "top foot";
+  }
+  .focus-bar { grid-area: bar; }
+  .segments { grid-area: seg; }
+  .focus-top { grid-area: top; gap: 16px; }
+  .focus-pad { grid-area: pad; align-self: center; gap: 12px; }
+  .focus-foot { grid-area: foot; }
+  .focus-title { font-size: 1.1rem; }
+  .focus .eyebrow { font-size: .95rem; }
+  .distance { font-size: clamp(8rem, 22vh, 12rem); }
+  .tally { gap: 8px; max-width: 420px; }
+  .slot { width: 44px; height: 44px; font-size: 1.2rem; border-radius: 10px; }
+  .tally.pp360 { grid-template-columns: repeat(5, 44px); }
+  .pip { width: 22px; height: 22px; }
+  .running { font-size: 1.15rem; }
+  .running strong { font-size: 1.5rem; }
+  .pad-q { font-size: 1.1rem; }
+  .count-grid, .two.even { gap: 12px; }
+  .key { min-height: 84px; font-size: 2rem; }
+  .key.all { min-height: 104px; }
+  .key.miss, .two .key.all { min-height: 200px; }
+  .key.toggle { min-height: 68px; font-size: 1.2rem; }
+}
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

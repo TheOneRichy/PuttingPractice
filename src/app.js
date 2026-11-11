@@ -245,13 +245,24 @@ function viewPractice() {
 // ---- live session -------------------------------------------------------------
 /** Full-screen, no tabs: everything you need mid-putt and nothing to mis-tap. */
 let canUndo = false;
+/** The logged result being corrected: { i } is its place in the tally (plus first/last for Perfect Putt). */
+let fixing = null;
+/** This station's logged entries in order, each with where its putts start in the station's log. */
+function stationEntries(a, station) {
+  const out = [];
+  let off = 0;
+  for (const h of a.history || []) if (h.station === station && h.n) { out.push({ h, off }); off += h.n; }
+  return out;
+}
+const fixHead = (what) => `<p class="pad-q fixing">Fixing <strong>${what}</strong>
+  <button class="link" data-action="fix-cancel">Cancel</button></p>`;
 function focusShell({ title, segments, top, pad, foot }) {
   return `
   <div class="focus">
     <header class="focus-bar">
       <a class="icon-btn" href="#practice" aria-label="Pause and go back">${icon('close')}</a>
       <span class="focus-title">${title}</span>
-      <button class="icon-btn" data-action="undo" aria-label="Undo" ${canUndo ? '' : 'disabled'}>${icon('undo')}</button>
+      <button class="icon-btn undo" data-action="undo" ${canUndo ? '' : 'disabled'}>${icon('undo')}<span>${fixing ? 'Cancel' : 'Undo'}</span></button>
     </header>
     <div class="segments" aria-hidden="true">${segments
       .map((s) => `<span style="flex:${s.weight}"><i style="width:${Math.round(s.fraction * 100)}%"></i></span>`).join('')}</div>
@@ -266,9 +277,11 @@ const countPad = (size, action) => `
   <div class="count-grid ${size > 6 ? 'wide' : ''}">${Array.from({ length: size }, (_, n) =>
     `<button class="key ${n === 0 ? 'zero' : ''}" data-action="${action}" data-makes="${n}">${n}</button>`).join('')}</div>
   <button class="key all" data-action="${action}" data-makes="${size}">All ${size}</button>`;
-const slot = (makes, of, current) => makes == null
-  ? `<span class="slot ${current ? 'now' : ''}"></span>`
-  : `<span class="slot done ${makes === of ? 'clean' : ''}">${makes}</span>`;
+/** A logged result is a button: tap it to correct it. */
+const slot = (makes, of, current, i) => makes == null
+  ? `<span class="slot ${current && !fixing ? 'now' : ''}"></span>`
+  : `<button class="slot done ${makes === of ? 'clean' : ''} ${fixing?.i === i ? 'fix' : ''}" data-action="fix-pick" data-i="${i}"
+      aria-label="Change result ${i + 1}, now ${makes} of ${of}" aria-pressed="${fixing?.i === i}">${makes}</button>`;
 
 function viewSession() {
   const a = state.active;
@@ -286,21 +299,29 @@ function viewSession() {
   canUndo = (a.history || []).length > 0 || sofar.length > 0;
   let tally;
   let where;
+  let pad;
   if (putters > 1) {
-    const done = (a.history || []).filter((h) => h.set && h.station === a.stationIdx);
+    const done = stationEntries(a, a.stationIdx).map((e) => e.h).filter((h) => h.set);
+    if (fixing && !done[fixing.i]) fixing = null;
     const totalSets = done.length + Math.ceil((st.putts - log.length) / putters);
     where = `Set ${done.length + 1} of ${totalSets}`;
-    tally = Array.from({ length: totalSets }, (_, i) => slot(done[i]?.makes, done[i]?.n, i === done.length)).join('');
+    tally = Array.from({ length: totalSets }, (_, i) => slot(done[i]?.makes, done[i]?.n, i === done.length, i)).join('');
+    pad = fixing ? fixHead(`set ${fixing.i + 1}`) + countPad(done[fixing.i].n, 'fix') : countPad(size, 'set');
   } else {
+    if (fixing && fixing.i >= log.length) fixing = null;
     where = `Putt ${log.length + 1} of ${st.putts}`;
     tally = Array.from({ length: st.putts }, (_, i) =>
-      `<span class="pip ${i < log.length ? (log[i] ? 'make' : 'miss') : i === log.length ? 'now' : ''}"></span>`).join('');
-  }
-  const pad = putters > 1 ? countPad(size, 'set') : `
+      i < log.length
+        ? `<button class="pip ${log[i] ? 'make' : 'miss'} ${fixing?.i === i ? 'fix' : ''}" data-action="fix-pick" data-i="${i}"
+            aria-label="Change putt ${i + 1}, now a ${log[i] ? 'make' : 'miss'}" aria-pressed="${fixing?.i === i}"></button>`
+        : `<span class="pip ${i === log.length && !fixing ? 'now' : ''}"></span>`).join('');
+    const act = fixing ? 'fix' : 'putt';
+    pad = `${fixing ? fixHead(`putt ${fixing.i + 1}`) : ''}
     <div class="two">
-      <button class="key miss" data-action="putt" data-made="0">Miss</button>
-      <button class="key all" data-action="putt" data-made="1">Make</button>
+      <button class="key miss" data-action="${act}" data-made="0">Miss</button>
+      <button class="key all" data-action="${act}" data-made="1">Make</button>
     </div>`;
+  }
   return focusShell({
     title: esc(sessionName(a)),
     segments: prog.parts.map((p) => ({ weight: p.putts, fraction: p.fraction })),
@@ -321,15 +342,16 @@ function viewJyly(a) {
   if (a.finishedEarly || a.rounds.length >= S.JYLY_ROUNDS) return viewFinish(a);
   const dist = S.jylyCurrentDistance(a.rounds);
   canUndo = a.rounds.length > 0;
+  if (fixing && !a.rounds[fixing.i]) fixing = null;
   return focusShell({
     title: 'JYLY',
     segments: Array.from({ length: S.JYLY_ROUNDS }, (_, i) => ({ weight: 1, fraction: i < a.rounds.length ? 1 : 0 })),
     top: `
       <p class="eyebrow">Round ${a.rounds.length + 1} of ${S.JYLY_ROUNDS}${unit() === 'ft' ? ` · ${(dist * S.FT_PER_M).toFixed(0)} ft` : ''}</p>
       <p class="distance">${dist}<small>m</small></p>
-      <div class="tally">${Array.from({ length: S.JYLY_ROUNDS }, (_, i) => slot(a.rounds[i]?.makes, S.JYLY_PUTTS, i === a.rounds.length)).join('')}</div>
+      <div class="tally">${Array.from({ length: S.JYLY_ROUNDS }, (_, i) => slot(a.rounds[i]?.makes, S.JYLY_PUTTS, i === a.rounds.length, i)).join('')}</div>
       <p class="running">Score <strong>${S.jylyScore(a.rounds)}</strong></p>`,
-    pad: countPad(S.JYLY_PUTTS, 'jyly'),
+    pad: fixing ? fixHead(`round ${fixing.i + 1}`) + countPad(S.JYLY_PUTTS, 'fix') : countPad(S.JYLY_PUTTS, 'jyly'),
     foot: '<button class="btn ghost small" data-action="finish-early">Finish</button>',
   });
 }
@@ -340,8 +362,11 @@ function viewPp360(a) {
   const n = S.PP360_FT.length;
   const d = i % n;
   const P = S.PP360_POINTS;
-  const first = !!a.pending?.first;
-  const last = !!a.pending?.last;
+  if (fixing && !a.rounds[fixing.i]) fixing = null;
+  const marks = fixing || a.pending;
+  const first = !!marks?.first;
+  const last = !!marks?.last;
+  const act = fixing ? 'fix' : 'pp360';
   const range = S.pp360MakesRange(first, last);
   canUndo = i > 0;
   const toggle = (key, on, label, pts) => `<button class="key toggle ${on ? 'on' : ''}" data-action="pp360-toggle" data-key="${key}" aria-pressed="${on}">
@@ -352,14 +377,14 @@ function viewPp360(a) {
     top: `
       <p class="eyebrow">Round ${Math.floor(i / n) + 1} of ${S.PP360_ROUNDS} · Station ${d + 1} of ${n}</p>
       <p class="distance">${pp360Dists()[d]}<small>${unit()}</small></p>
-      <div class="tally pp360">${Array.from({ length: S.PP360_STATIONS }, (_, k) => slot(a.rounds[k]?.makes, S.PP360_PUTTS, k === i)).join('')}</div>
+      <div class="tally pp360">${Array.from({ length: S.PP360_STATIONS }, (_, k) => slot(a.rounds[k]?.makes, S.PP360_PUTTS, k === i, k)).join('')}</div>
       <p class="running">Score <strong>${S.pp360Score(a.rounds)}</strong> <span class="muted">· ${P.make[d]} per make · all ten +${P.all[d]}</span></p>`,
-    pad: `
+    pad: `${fixing ? fixHead(`station ${fixing.i + 1}`) : ''}
       <p class="pad-q">Putt <strong>${S.PP360_PUTTS}</strong>. Mark the first and last, then tap how many went in.</p>
       <div class="two even">${toggle('first', first, 'First in', P.first[d])}${toggle('last', last, 'Last in', P.last[d])}</div>
       <div class="count-grid five">${Array.from({ length: S.PP360_PUTTS }, (_, m) =>
-        `<button class="key ${m === 0 ? 'zero' : ''}" data-action="pp360" data-makes="${m}" ${m === 0 || (m >= range.min && m <= range.max) ? '' : 'disabled'}>${m}</button>`).join('')}</div>
-      <button class="key all" data-action="pp360" data-makes="${S.PP360_PUTTS}">All ${S.PP360_PUTTS}</button>`,
+        `<button class="key ${m === 0 ? 'zero' : ''}" data-action="${act}" data-makes="${m}" ${m === 0 || (m >= range.min && m <= range.max) ? '' : 'disabled'}>${m}</button>`).join('')}</div>
+      <button class="key all" data-action="${act}" data-makes="${S.PP360_PUTTS}">All ${S.PP360_PUTTS}</button>`,
     foot: '<button class="btn ghost small" data-action="finish-early">Finish</button>',
   });
 }
@@ -682,6 +707,7 @@ function render() {
 let shownScreen = null;
 let lastRoute = null;
 window.addEventListener('hashchange', () => {
+  fixing = null;
   render();
   const route = location.hash.slice(1);
   if (route !== lastRoute) window.scrollTo(0, 0);
@@ -817,8 +843,43 @@ const actions = {
     if (navigator.vibrate) navigator.vibrate(30);
     persist(); render();
   },
+  'fix-pick': (el) => {
+    const i = Number(el.dataset.i);
+    const r = state.active.rounds?.[i];
+    fixing = fixing?.i === i ? null : { i, first: !!r?.first, last: !!r?.last };
+    render();
+  },
+  'fix-cancel': () => { fixing = null; render(); },
+  /** Replace a logged result in place; everything after it stays as it was. */
+  fix: (el) => {
+    const a = state.active;
+    const { i } = fixing;
+    if (isGame(a)) {
+      const r = a.rounds[i];
+      r.makes = Number(el.dataset.makes);
+      if (a.kind === 'pp360') {
+        const sure = r.makes === S.PP360_PUTTS ? true : r.makes === 0 ? false : null;
+        r.first = sure ?? fixing.first;
+        r.last = sure ?? fixing.last;
+      }
+    } else {
+      const log = a.log[a.stationIdx];
+      const entries = stationEntries(a, a.stationIdx);
+      if ('made' in el.dataset) log[i] = el.dataset.made === '1';
+      else {
+        const e = entries.filter((x) => x.h.set)[i];
+        const makes = Math.min(e.h.n, Number(el.dataset.makes));
+        for (let k = 0; k < e.h.n; k++) log[e.off + k] = k < makes;
+      }
+      for (const { h, off } of entries) h.makes = log.slice(off, off + h.n).filter(Boolean).length;
+    }
+    fixing = null;
+    if (navigator.vibrate) navigator.vibrate(30);
+    persist(); render();
+  },
   'pp360-toggle': (el) => {
     const a = state.active;
+    if (fixing) { fixing[el.dataset.key] = !fixing[el.dataset.key]; render(); return; }
     a.pending = { ...a.pending, [el.dataset.key]: !a.pending?.[el.dataset.key] };
     persist(); render();
   },
@@ -904,8 +965,27 @@ app.addEventListener('click', (e) => {
   const el = e.target.closest('[data-action]');
   if (!el || el.disabled) return;
   const fn = actions[el.dataset.action];
-  if (fn) { e.preventDefault(); fn(el); }
+  if (!fn) return;
+  e.preventDefault();
+  const { action } = el.dataset;
+  const fixed = fixing?.i;
+  // While correcting a result, Undo only backs out of the correction; any other action ends it.
+  if (fixing && action === 'undo') { fixing = null; render(); return; }
+  if (!['fix-pick', 'fix', 'pp360-toggle'].includes(action)) fixing = null;
+  const key = el.classList.contains('key') ? keySelector(el) : null;
+  fn(el);
+  if (action === 'fix') app.querySelector(`.tally [data-i="${fixed}"]`)?.classList.add('landed');
+  else if (key) replayTap(key, action !== 'pp360-toggle');
 });
+
+/** Scoring keys are redrawn by the tap that hits them, so find the same key again by what it logs. */
+const keySelector = (el) => `.key[data-action="${el.dataset.action}"]` +
+  ['makes', 'made', 'key'].filter((k) => k in el.dataset).map((k) => `[data-${k}="${el.dataset[k]}"]`).join('');
+/** Play the press on the redrawn key, and drop the new result into the tally. */
+function replayTap(selector, scored) {
+  app.querySelector(selector)?.classList.add('tapped');
+  if (scored) [...app.querySelectorAll('.tally .slot.done, .tally .pip.make, .tally .pip.miss')].at(-1)?.classList.add('landed');
+}
 
 // Notes survive a re-render or a reload while the finish screen is open.
 app.addEventListener('input', (e) => {
