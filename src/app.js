@@ -1,4 +1,5 @@
 import * as S from './stats.js';
+import { rangeChart, lineChart } from './charts.js';
 import { load, save, uid, validateImport, DEFAULT_ROUTINES } from './store.js';
 
 let state = load();
@@ -10,46 +11,54 @@ const esc = (v) =>
   String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const unit = () => state.settings.unit;
 const fmtPct = (p) => `${Math.round(p)}%`;
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const fmtDate = (iso) =>
   new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 const todayKey = () => {
   const d = new Date();
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 };
+const daysAgo = (n) => new Date(Date.now() - n * 864e5).toISOString();
+const totals = (sessions) => sessions.reduce((a, s) => {
+  const t = S.sessionTotals(s);
+  return { makes: a.makes + t.makes, attempts: a.attempts + t.attempts };
+}, { makes: 0, attempts: 0 });
+
 const routineSummary = (r) => {
-  if (r.kind === 'jyly') return '20 rounds × 5 putts, 5–10 m';
-  if (r.count === 'sets') {
-    const p = puttersPref();
-    const sets = r.stations.reduce((n, s) => n + s.sets, 0);
-    const st = r.stations;
-    const dists = `${st.map((s) => s.distance).join(' · ')} ${r.unit}`;
-    const plural = (n) => `${n} set${n === 1 ? '' : 's'}`;
-    const where = st.length === 1 ? `${plural(sets)} at ${dists}`
-      : st.every((s) => s.sets === st[0].sets) ? `${plural(st[0].sets)} each at ${dists}`
-      : `${plural(sets)} across ${dists}`;
-    return `${where} · ${sets * p} putts with ${p} putter${p === 1 ? '' : 's'}`;
-  }
-  const total = r.stations.reduce((n, s) => n + s.putts, 0);
+  if (r.kind === 'jyly') return '20 rounds of 5 putts · 5–10 m';
   const st = r.stations;
-  if (st.length > 1 && st.every((s) => s.distance === st[0].distance && s.putts === st[0].putts)) {
-    return `${st.length} × ${st[0].putts} putts at ${st[0].distance} ${r.unit} · ${total} putts`;
-  }
-  return st.map((s) => `${s.distance}`).join(' · ') + ` ${r.unit} · ${total} putts`;
+  const dists = `${[...new Set(st.map((s) => s.distance))].join(' · ')} ${r.unit}`;
+  const putts = S.expandStations(r, puttersPref()).reduce((n, s) => n + s.putts, 0);
+  return `${dists} · ${plural(putts, 'putt')}`;
 };
+
+const icons = {
+  practice: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>',
+  progress: '<path d="M4 19V5M4 19h16M8 15l4-5 3 3 4-6"/>',
+  history: '<path d="M5 6h14M5 12h14M5 18h9"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  undo: '<path d="M9 7L4 12l5 5M4 12h10a6 6 0 010 12h-2" transform="translate(0 -3)"/>',
+  chevron: '<path d="M9 6l6 6-6 6"/>',
+  back: '<path d="M15 6l-6 6 6 6"/>',
+};
+const icon = (name) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${icons[name]}</svg>`;
 
 // ---- putters / sets ---------------------------------------------------------
 const clampPutters = (n) => Math.min(S.MAX_PUTTERS, Math.max(1, Math.round(Number(n)) || 1));
 const puttersPref = () => clampPutters(state.settings.putters);
-const puttersSelect = (id, value) => `<select id="${id}" aria-label="Putters per set">${
-  Array.from({ length: S.MAX_PUTTERS }, (_, i) => i + 1)
-    .map((n) => `<option value="${n}" ${n === value ? 'selected' : ''}>${n === 1 ? '1 (tap each putt)' : n}</option>`)
-    .join('')}</select>`;
+const stepper = (key, value, label, { min, max }) => `
+  <div class="stepper" role="group" aria-label="${label}">
+    <button type="button" data-action="step" data-key="${key}" data-d="-1" aria-label="Fewer" ${value <= min ? 'disabled' : ''}>−</button>
+    <output>${value}</output>
+    <button type="button" data-action="step" data-key="${key}" data-d="1" aria-label="More" ${value >= max ? 'disabled' : ''}>+</button>
+  </div>`;
 /** "6 · 4 · 5" plus clean-set count, for finish screen and history. */
 function setsLine(sets) {
   if (!sets?.length) return '';
   const st = S.setStats(sets);
-  return `Sets: ${sets.map((x) => (x.makes === x.attempts ? `<strong>${x.makes}</strong>` : x.makes)).join(' · ')}
-    <span class="muted">· ${st.clean} of ${st.count} clean · avg ${st.avgMakes.toFixed(1)} made</span>`;
+  return `Sets ${sets.map((x) => (x.makes === x.attempts ? `<strong>${x.makes}</strong>` : x.makes)).join(' · ')}
+    <span class="muted">· ${st.clean} of ${st.count} clean · avg ${st.avgMakes.toFixed(1)}</span>`;
 }
 
 // ---- practice zone ---------------------------------------------------------
@@ -58,21 +67,22 @@ const zoneSets = () => Math.min(30, Math.max(1, Number(state.settings.zoneSets) 
 const zoneTarget = () => Number(state.settings.zoneTarget) || 85;
 const ZONE_MIN = 50; // putts before the app makes a call
 const ZONE_BAND = 5; // ± % around the target that counts as "in the zone"
+const zoneOpts = () => ({ target: zoneTarget(), band: ZONE_BAND, minAttempts: ZONE_MIN });
 const fmtDist = (ft) => (unit() === 'm' ? `${S.fromFt(ft, 'm').toFixed(1)} m` : `${Math.round(ft)} ft`);
 const zoneMessages = {
-  'need-more': (v) => `Not enough putts yet for a reliable number. About <strong>${v.needed}</strong> more and the app will make a call.`,
-  'in-zone': () => 'You are in the zone at this distance. Keep practising here.',
-  'too-hard': () => 'Clearly below the zone. Move a step or two closer.',
-  'too-easy': () => 'Clearly above the zone. Move a step or two back.',
-  'leaning-hard': () => 'Leaning below the zone, but not certain yet. Keep logging putts here.',
-  'leaning-easy': () => 'Leaning above the zone, but not certain yet. Keep logging putts here.',
+  'need-more': (v) => `${plural(v.needed, 'more putt')} here and you get a reliable read.`,
+  'in-zone': () => 'In the zone. This is the distance to practise.',
+  'too-hard': () => 'Clearly below the zone at this distance.',
+  'too-easy': () => 'Clearly above the zone at this distance.',
+  'leaning-hard': () => 'Leaning below the zone, not certain yet. Keep putting here.',
+  'leaning-easy': () => 'Leaning above the zone, not certain yet. Keep putting here.',
 };
-const zoneTone = { 'in-zone': 'up', 'too-hard': 'down', 'too-easy': 'down' };
-
 const zoneShort = {
-  'need-more': (v) => `${v.needed} more putts`, 'in-zone': () => 'in the zone', 'too-hard': () => 'too hard',
-  'too-easy': () => 'too easy', 'leaning-hard': () => 'leaning hard', 'leaning-easy': () => 'leaning easy',
+  'need-more': (v) => `${v.needed} to go`, 'in-zone': () => 'In the zone', 'too-hard': () => 'Too hard',
+  'too-easy': () => 'Too easy', 'leaning-hard': () => 'Leaning hard', 'leaning-easy': () => 'Leaning easy',
 };
+const pill = (v) => `<span class="pill ${v.status}">${zoneShort[v.status](v)}</span>`;
+
 /** Dropdown of standard distances. Values are in the given unit. */
 const distanceSelect = (attrs, u, value) => {
   const opts = S.standardDistances(u);
@@ -81,17 +91,27 @@ const distanceSelect = (attrs, u, value) => {
     .map((d) => `<option value="${d}" ${d === Number(value) ? 'selected' : ''}>${d} ${u}${extra.includes(d) ? ' (old)' : ''}</option>`)
     .join('')}</select>`;
 };
-const zoneSelect = (id) => `<select id="${id}" aria-label="Zone distance">${S.STANDARD_FT
-  .map((d) => `<option value="${d}" ${d === zoneFt() ? 'selected' : ''}>${fmtDist(d)}</option>`).join('')}</select>`;
 
-/** Zone verdict at a distance (default: the zone distance), using the last 30 days when there are enough putts. */
-function zoneReport(sessions, ft = zoneFt()) {
-  const opts = { target: zoneTarget(), band: ZONE_BAND, minAttempts: ZONE_MIN };
-  const all = S.atFeet(sessions, ft);
-  const recent = S.atFeet(S.sessionsSince(sessions, new Date(Date.now() - 30 * 864e5).toISOString()), ft);
+/** Verdict from all-time and last-30-day tallies: recent form wins once it has enough putts. */
+function judge(all, recent) {
   const useRecent = recent.attempts >= ZONE_MIN && recent.attempts < all.attempts;
-  const v = S.zoneVerdict(useRecent ? recent : all, opts);
-  return { ft, all, recent, useRecent, v };
+  return { all, recent, useRecent, v: S.zoneVerdict(useRecent ? recent : all, zoneOpts()) };
+}
+/** Zone verdict at a standard distance in feet (default: the zone distance). */
+function zoneReport(sessions, ft = zoneFt()) {
+  return { ft, ...judge(S.atFeet(sessions, ft), S.atFeet(S.sessionsSince(sessions, daysAgo(30)), ft)) };
+}
+/** Sentence + optional "move" button for a zone report. */
+function advice(z, { after = false } = {}) {
+  const move = S.zoneMove(z.v.status, z.ft);
+  const text = zoneMessages[z.v.status](z.v);
+  if (move == null) return `<p class="advice">${text}</p>`;
+  if (move === zoneFt()) return `<p class="advice">${text} Your zone is set to <strong>${fmtDist(move)}</strong>.</p>`;
+  const step = `Step ${move > z.ft ? 'back' : 'in'} to ${fmtDist(move)}${after ? ' next time' : ''}.`;
+  // Only offer to move the zone from the zone distance itself.
+  if (z.ft !== zoneFt()) return `<p class="advice">${text}</p>`;
+  return `<p class="advice">${text} ${step}</p>
+    <button class="btn small" data-action="set-zone" data-ft="${move}">Move zone to ${fmtDist(move)}</button>`;
 }
 
 const go = (hash) => {
@@ -99,99 +119,131 @@ const go = (hash) => {
   else location.hash = hash;
 };
 
-// ---- charts --------------------------------------------------------------
-function lineChart(points, { yMax = 100, suffix = '%', label = '' } = {}) {
-  if (points.length < 2) {
-    return `<p class="muted small">Log at least two sessions to see a trend.</p>`;
-  }
-  const W = 320, H = 170, L = 34, R = 10, T = 12, B = 26;
-  const x = (i) => L + (i * (W - L - R)) / (points.length - 1);
-  const y = (v) => T + (1 - v / yMax) * (H - T - B);
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(f * yMax));
-  const path = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
-  // 5-point rolling average to show the underlying trend.
-  const avg = points.map((_, i) => {
-    const w = points.slice(Math.max(0, i - 4), i + 1);
-    return w.reduce((n, p) => n + p.value, 0) / w.length;
+// ---- toast & confirm sheet ----------------------------------------------------
+function toast(text) {
+  document.querySelector('.toast')?.remove();
+  const el = Object.assign(document.createElement('div'), { className: 'toast', textContent: text });
+  el.setAttribute('role', 'status');
+  document.body.append(el);
+  setTimeout(() => el.remove(), 2600);
+}
+function ask(text, okLabel, onOk) {
+  const d = document.createElement('dialog');
+  d.className = 'sheet';
+  d.innerHTML = `<p>${esc(text)}</p><div class="sheet-row">
+    <button class="btn" value="cancel">Cancel</button>
+    <button class="btn danger-fill" value="ok">${esc(okLabel)}</button></div>`;
+  const close = () => { d.close(); d.remove(); };
+  d.addEventListener('click', (e) => {
+    const v = e.target.closest('button')?.value;
+    if (v) { close(); if (v === 'ok') onOk(); } else if (e.target === d) close();
   });
-  const avgPath = avg.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-  const short = (iso) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  return `
-  <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">
-    ${ticks.map((t) => `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/>
-      <text class="axis" x="${L - 6}" y="${y(t) + 3}" text-anchor="end">${t}${suffix}</text>`).join('')}
-    <path class="line-raw" d="${path}"/>
-    <path class="line-avg" d="${avgPath}"/>
-    ${points.map((p, i) => `<circle class="dot" cx="${x(i)}" cy="${y(p.value)}" r="2.6"><title>${short(p.date)}: ${Math.round(p.value)}${suffix}</title></circle>`).join('')}
-    <text class="axis" x="${L}" y="${H - 6}">${short(points[0].date)}</text>
-    <text class="axis" x="${W - R}" y="${H - 6}" text-anchor="end">${short(points.at(-1).date)}</text>
-  </svg>
-  <p class="legend small"><span class="key raw"></span>each session <span class="key avg"></span>5-session average</p>`;
+  d.addEventListener('cancel', () => d.remove());
+  document.body.append(d);
+  d.showModal();
 }
 
-// ---- views ---------------------------------------------------------------
-const tabs = [
-  ['practice', 'Practice'],
-  ['history', 'History'],
-  ['progress', 'Progress'],
-  ['routines', 'Routines'],
-  ['settings', 'Settings'],
-];
+// ---- shells -----------------------------------------------------------------
+const tabs = [['practice', 'Practice'], ['progress', 'Progress'], ['history', 'History']];
 
-function shell(active, body) {
+/** Top-level screen: title bar with settings, body, bottom tabs. */
+function shell(active, title, body) {
   return `
-  <header class="top"><h1>Putting Practice</h1></header>
+  <header class="top"><h1>${title}</h1>
+    <a class="icon-btn" href="#settings" aria-label="Settings">${icon('gear')}</a></header>
   <main>${body}</main>
-  <nav class="tabs">${tabs
-    .map(([id, label]) => `<a href="#${id}" class="${id === active ? 'on' : ''}">${label}</a>`)
+  <nav class="tabs" aria-label="Sections">${tabs
+    .map(([id, label]) => `<a href="#${id}" class="${id === active ? 'on' : ''}" ${id === active ? 'aria-current="page"' : ''}>${icon(id)}<span>${label}</span></a>`)
     .join('')}</nav>`;
 }
+/** Second-level screen: back arrow, no tabs. */
+function subpage(title, body, back = 'practice') {
+  return `
+  <header class="top sub"><a class="icon-btn" href="#${back}" aria-label="Back">${icon('back')}</a><h1>${title}</h1></header>
+  <main>${body}</main>`;
+}
 
-function zonePracticeCard() {
+// ---- practice (home) ----------------------------------------------------------
+function zoneHero() {
   const p = puttersPref();
   const z = zoneReport(state.sessions);
-  const status = z.all.attempts
-    ? `${fmtDist(z.ft)}: <strong>${fmtPct(z.v.pct)}</strong> over ${z.v.attempts} putts · <span class="${zoneTone[z.v.status] || ''}">${zoneShort[z.v.status](z.v)}</span>`
-    : `No putts at ${fmtDist(z.ft)} yet.`;
-  return `<div class="card accent">
-    <h3>Zone practice</h3>
-    <p class="muted small">Pick a standard distance and putt there. Stats build up per distance, so you can find where you make ${zoneTarget()}%.</p>
-    <div class="zone-pick">
-      <label class="field">Distance ${zoneSelect('zone-dist')}</label>
-      <label class="field">Sets <select id="zone-sets">${Array.from({ length: 30 }, (_, i) => i + 1)
-        .map((n) => `<option value="${n}" ${n === zoneSets() ? 'selected' : ''}>${n} (${n * p} putts)</option>`).join('')}</select></label>
+  const chips = S.STANDARD_FT.map((ft) => {
+    const r = ft === z.ft ? z : zoneReport(state.sessions, ft);
+    return `<button class="chip ${ft === z.ft ? 'on' : ''} ${r.v.status}" data-action="set-zone" data-ft="${ft}" aria-pressed="${ft === z.ft}">
+      <b>${unit() === 'm' ? S.fromFt(ft, 'm').toFixed(1) : ft}</b><span>${r.all.attempts ? fmtPct(r.v.pct) : '–'}</span></button>`;
+  }).join('');
+  const read = z.all.attempts
+    ? `<p class="hero-pct">${fmtPct(z.v.pct)}</p><p class="muted small">${plural(z.v.attempts, 'putt')}${z.useRecent ? ' · 30 days' : ''}</p>${pill(z.v)}`
+    : `<p class="hero-pct muted">–</p><p class="muted small">no putts here yet</p>`;
+  return `<section class="hero" aria-label="Zone practice">
+    <p class="eyebrow">Zone practice · aim for ${zoneTarget()}%</p>
+    <div class="hero-head">
+      <div><p class="hero-dist">${fmtDist(z.ft).replace(/ (\w+)$/, '<small>$1</small>')}</p></div>
+      <div class="hero-read">${read}</div>
     </div>
-    <p class="small">${status}</p>
-    <button class="btn primary full" data-action="start-zone" ${state.active ? 'disabled' : ''}>Start ${zoneSets() * p} putts at ${fmtDist(zoneFt())}</button>
-  </div>`;
+    <div class="chips" role="group" aria-label="Distance (${unit()}), with your make % at each">${chips}</div>
+    ${z.all.attempts ? advice(z) : `<p class="advice">Pick a distance and putt. Your make % builds up at each mark until you find where you hit ${zoneTarget()}%.</p>`}
+    <div class="setup">
+      <div class="setup-item"><span>Sets</span> ${stepper('zoneSets', zoneSets(), 'Sets', { min: 1, max: 30 })}</div>
+      <div class="setup-item"><span>Putters per set</span> ${stepper('putters', p, 'Putters per set', { min: 1, max: S.MAX_PUTTERS })}</div>
+    </div>
+    <button class="btn primary xl" data-action="start-zone" ${state.active ? 'disabled' : ''}>Start ${plural(zoneSets() * p, 'putt')} at ${fmtDist(z.ft)}</button>
+  </section>`;
 }
 
 function viewPractice() {
   const resume = state.active
-    ? `<div class="card accent"><strong>Session in progress</strong>
-        <p class="muted">${esc(state.active.routineName)}</p>
-        <div class="row"><a class="btn primary" href="#session">Resume</a>
-        <button class="btn ghost" data-action="discard">Discard</button></div></div>`
+    ? `<div class="resume"><div><strong>Session in progress</strong>
+        <p class="muted small">${esc(state.active.routineName)}</p></div>
+        <div class="resume-btns"><button class="btn ghost small" data-action="discard">Discard</button>
+        <a class="btn primary small" href="#session">Resume</a></div></div>`
     : '';
-  const today = S.sessionsSince(state.sessions, todayKey());
-  const todayTot = today.reduce((a, s) => { const t = S.sessionTotals(s); a.m += t.makes; a.a += t.attempts; return a; }, { m: 0, a: 0 });
-  return shell('practice', `
+  const today = totals(S.sessionsSince(state.sessions, todayKey()));
+  const streak = S.currentStreak(state.sessions, todayKey());
+  const todayLine = state.sessions.length
+    ? `<p class="today"><span><b>${streak}</b> day streak</span><span><b>${today.attempts}</b> putts today</span>
+        <span><b>${today.attempts ? fmtPct(S.pct(today.makes, today.attempts)) : '–'}</b> made</span></p>`
+    : '';
+  return shell('practice', 'Putting Practice', `
     ${resume}
-    <section class="stats-row">
-      <div class="stat"><span class="num">${S.currentStreak(state.sessions, todayKey())}</span><span class="lbl">day streak</span></div>
-      <div class="stat"><span class="num">${todayTot.a}</span><span class="lbl">putts today</span></div>
-      <div class="stat"><span class="num">${todayTot.a ? fmtPct(S.pct(todayTot.m, todayTot.a)) : '–'}</span><span class="lbl">today</span></div>
-    </section>
-    <label class="field inline">Putters per set ${puttersSelect('putters-pref', puttersPref())}</label>
-    <p class="muted small">Throw them all, walk up, then tap how many went in.</p>
-    ${zonePracticeCard()}
-    <h2>Start a routine</h2>
-    <ul class="list">${state.routines
-      .map((r) => `<li><button class="routine" data-action="start" data-id="${r.id}" ${state.active ? 'disabled' : ''}>
-        <strong>${esc(r.name)}</strong><span class="muted small">${esc(routineSummary(r))}</span></button></li>`)
-      .join('')}</ul>
-    <p><a class="btn ghost full" href="#quicklog">Log a session after the fact</a></p>`);
+    ${todayLine}
+    ${zoneHero()}
+    <div class="section-head"><h2>Routines</h2><a class="link" href="#routines">Edit</a></div>
+    <ul class="list rows">${state.routines
+      .map((r) => `<li><button class="rowbtn" data-action="start" data-id="${r.id}" ${state.active ? 'disabled' : ''}>
+        <span><strong>${esc(r.name)}</strong><span class="muted small">${esc(routineSummary(r))}</span></span>${icon('chevron')}</button></li>`)
+      .join('')}
+      <li><a class="rowbtn" href="#quicklog"><span><strong>Log a past session</strong>
+        <span class="muted small">Enter distance, putts and makes by hand</span></span>${icon('chevron')}</a></li></ul>`);
 }
+
+// ---- live session -------------------------------------------------------------
+/** Full-screen, no tabs: everything you need mid-putt and nothing to mis-tap. */
+let canUndo = false;
+function focusShell({ title, segments, top, pad, foot }) {
+  return `
+  <div class="focus">
+    <header class="focus-bar">
+      <a class="icon-btn" href="#practice" aria-label="Pause and go back">${icon('close')}</a>
+      <span class="focus-title">${title}</span>
+      <button class="icon-btn" data-action="undo" aria-label="Undo" ${canUndo ? '' : 'disabled'}>${icon('undo')}</button>
+    </header>
+    <div class="segments" aria-hidden="true">${segments
+      .map((s) => `<span style="flex:${s.weight}"><i style="width:${Math.round(s.fraction * 100)}%"></i></span>`).join('')}</div>
+    <div class="focus-top">${top}</div>
+    <div class="focus-pad">${pad}</div>
+    <footer class="focus-foot">${foot}</footer>
+  </div>`;
+}
+/** 0…N-1 as a grid with a full-width "all in" below, where the thumb rests. */
+const countPad = (size, action) => `
+  <p class="pad-q">How many of <strong>${size}</strong> went in?</p>
+  <div class="count-grid ${size > 6 ? 'wide' : ''}">${Array.from({ length: size }, (_, n) =>
+    `<button class="key ${n === 0 ? 'zero' : ''}" data-action="${action}" data-makes="${n}">${n}</button>`).join('')}</div>
+  <button class="key all" data-action="${action}" data-makes="${size}">All ${size}</button>`;
+const slot = (makes, of, current) => makes == null
+  ? `<span class="slot ${current ? 'now' : ''}"></span>`
+  : `<span class="slot done ${makes === of ? 'clean' : ''}">${makes}</span>`;
 
 function viewSession() {
   const a = state.active;
@@ -200,57 +252,60 @@ function viewSession() {
   if (a.finishedEarly || a.stationIdx >= a.stations.length) return viewFinish(a);
   const st = a.stations[a.stationIdx];
   const log = a.log[a.stationIdx];
-  const makes = log.filter(Boolean).length;
   const sofar = a.log.flat();
   const sofarMakes = sofar.filter(Boolean).length;
   const putters = clampPutters(a.putters);
   const size = S.nextSetSize(putters, st.putts - log.length);
-  const pip = (i) => `<span class="pip ${i < log.length ? (log[i] ? 'make' : 'miss') : ''}"></span>`;
-  const pips = putters > 1
-    ? Array.from({ length: Math.ceil(st.putts / putters) }, (_, g) =>
-        `<span class="pip-set">${Array.from({ length: Math.min(putters, st.putts - g * putters) }, (_, k) => pip(g * putters + k)).join('')}</span>`).join('')
-    : Array.from({ length: st.putts }, (_, i) => pip(i)).join('');
-  const entry = putters > 1
-    ? `<p class="progress-text">Set ${Math.floor(log.length / putters) + 1} of ${Math.ceil(st.putts / putters)} · how many of <strong>${size}</strong> went in?</p>
-      <div class="makes-grid ${size + 1 > 6 ? 'four' : ''}">${Array.from({ length: size + 1 }, (_, n) =>
-        `<button class="big ${n === size ? 'make' : n === 0 ? 'miss' : ''}" data-action="set" data-makes="${n}">${n}</button>`).join('')}</div>`
-    : `<div class="bigbtns">
-        <button class="big miss" data-action="putt" data-made="0">Miss</button>
-        <button class="big make" data-action="putt" data-made="1">Make</button>
-      </div>`;
-  return shell('practice', `
-    <div class="session">
-      <p class="muted">${esc(a.routineName)} · station ${a.stationIdx + 1} of ${a.stations.length}</p>
-      <div class="distance">${st.distance}<small> ${a.unit}</small></div>
-      <p class="progress-text">Putt ${Math.min(log.length + 1, st.putts)} of ${st.putts} · <strong>${makes}</strong> made</p>
-      <div class="pips">${pips}</div>
-      ${sofar.length ? `<p class="muted small">Session so far: ${sofarMakes}/${sofar.length} · <strong>${fmtPct(S.pct(sofarMakes, sofar.length))}</strong></p>` : ''}
-      ${entry}
-      <label class="field inline small">Putters ${puttersSelect('session-putters', putters)}</label>
-      <div class="row">
-        <button class="btn ghost" data-action="undo" ${sofar.length ? '' : 'disabled'}>Undo</button>
-        <button class="btn ghost" data-action="skip">Skip station</button>
-        <button class="btn ghost" data-action="finish-early">Finish now</button>
-      </div>
-    </div>`);
+  const prog = S.sessionProgress(a.stations, a.log, a.stationIdx);
+  canUndo = (a.history || []).length > 0 || sofar.length > 0;
+  let tally;
+  let where;
+  if (putters > 1) {
+    const done = (a.history || []).filter((h) => h.set && h.station === a.stationIdx);
+    const totalSets = done.length + Math.ceil((st.putts - log.length) / putters);
+    where = `Set ${done.length + 1} of ${totalSets}`;
+    tally = Array.from({ length: totalSets }, (_, i) => slot(done[i]?.makes, done[i]?.n, i === done.length)).join('');
+  } else {
+    where = `Putt ${log.length + 1} of ${st.putts}`;
+    tally = Array.from({ length: st.putts }, (_, i) =>
+      `<span class="pip ${i < log.length ? (log[i] ? 'make' : 'miss') : i === log.length ? 'now' : ''}"></span>`).join('');
+  }
+  const pad = putters > 1 ? countPad(size, 'set') : `
+    <div class="two">
+      <button class="key miss" data-action="putt" data-made="0">Miss</button>
+      <button class="key all" data-action="putt" data-made="1">Make</button>
+    </div>`;
+  return focusShell({
+    title: esc(a.routineName),
+    segments: prog.parts.map((p) => ({ weight: p.putts, fraction: p.fraction })),
+    top: `
+      <p class="eyebrow">${a.stations.length > 1 ? `Station ${a.stationIdx + 1} of ${a.stations.length} · ` : ''}${where}</p>
+      <p class="distance">${st.distance}<small>${a.unit}</small></p>
+      <div class="tally">${tally}</div>
+      <p class="running">${sofar.length ? `<strong>${fmtPct(S.pct(sofarMakes, sofar.length))}</strong> · ${sofarMakes} of ${sofar.length} made` : 'Throw them all, walk up, tap the count.'}</p>`,
+    pad,
+    foot: `
+      <div class="foot-putters"><span>Putters</span> ${stepper('sessionPutters', putters, 'Putters per set', { min: 1, max: S.MAX_PUTTERS })}</div>
+      ${a.stations.length > 1 ? '<button class="btn ghost small" data-action="skip">Skip station</button>' : ''}
+      <button class="btn ghost small" data-action="finish-early">Finish</button>`,
+  });
 }
 
 function viewJyly(a) {
   if (a.finishedEarly || a.rounds.length >= S.JYLY_ROUNDS) return viewFinish(a);
   const dist = S.jylyCurrentDistance(a.rounds);
-  return shell('practice', `
-    <div class="session">
-      <p class="muted">JYLY · round ${a.rounds.length + 1} of ${S.JYLY_ROUNDS} · score <strong>${S.jylyScore(a.rounds)}</strong></p>
-      <div class="distance">${dist}<small> m</small></div>
-      <p class="progress-text">${(dist * S.FT_PER_M).toFixed(0)} ft · how many of 5 went in?</p>
-      <div class="makes-grid">${[0, 1, 2, 3, 4, 5]
-        .map((n) => `<button class="big ${n === 5 ? 'make' : n === 0 ? 'miss' : ''}" data-action="jyly" data-makes="${n}">${n}</button>`)
-        .join('')}</div>
-      <div class="row">
-        <button class="btn ghost" data-action="undo" ${a.rounds.length ? '' : 'disabled'}>Undo</button>
-        <button class="btn ghost" data-action="finish-early">Finish now</button>
-      </div>
-    </div>`);
+  canUndo = a.rounds.length > 0;
+  return focusShell({
+    title: 'JYLY',
+    segments: Array.from({ length: S.JYLY_ROUNDS }, (_, i) => ({ weight: 1, fraction: i < a.rounds.length ? 1 : 0 })),
+    top: `
+      <p class="eyebrow">Round ${a.rounds.length + 1} of ${S.JYLY_ROUNDS} · ${(dist * S.FT_PER_M).toFixed(0)} ft</p>
+      <p class="distance">${dist}<small>m</small></p>
+      <div class="tally">${Array.from({ length: S.JYLY_ROUNDS }, (_, i) => slot(a.rounds[i]?.makes, S.JYLY_PUTTS, i === a.rounds.length)).join('')}</div>
+      <p class="running">Score <strong>${S.jylyScore(a.rounds)}</strong></p>`,
+    pad: countPad(S.JYLY_PUTTS, 'jyly'),
+    foot: '<button class="btn ghost small" data-action="finish-early">Finish</button>',
+  });
 }
 
 function buildResults(a) {
@@ -266,239 +321,252 @@ function buildSets(a) {
     .map((h) => ({ ft: S.toFt(a.stations[h.station].distance, a.unit), attempts: h.n, makes: h.makes }));
 }
 
+const barRow = (label, makes, attempts) => `<li class="bar-row"><span class="bar-label">${label}</span>
+  <span class="bar"><i style="width:${S.pct(makes, attempts)}%"></i></span>
+  <span class="bar-val"><b>${fmtPct(S.pct(makes, attempts))}</b> <span class="muted">${makes}/${attempts}</span></span></li>`;
+
 function viewFinish(a) {
   const results = buildResults(a);
   const tot = S.sessionTotals({ results });
   const rows = a.kind === 'jyly'
-    ? `<p class="score">JYLY score <strong>${S.jylyScore(a.rounds)}</strong> / 1000</p>`
-    : `<table><tr><th>Distance</th><th>Made</th><th>%</th></tr>${a.stations
-        .map((st, i) => a.log[i].length
-          ? `<tr><td>${st.distance} ${a.unit}</td><td>${a.log[i].filter(Boolean).length}/${a.log[i].length}</td><td>${fmtPct(S.pct(a.log[i].filter(Boolean).length, a.log[i].length))}</td></tr>`
-          : '')
-        .join('')}</table>`;
+    ? S.byDistance([{ results }], 'm').map((d) => barRow(`${d.distance} m`, d.makes, d.attempts))
+    : a.stations.map((st, i) => (a.log[i].length ? barRow(`${st.distance} ${a.unit}`, a.log[i].filter(Boolean).length, a.log[i].length) : ''));
+  const sets = a.kind === 'jyly' ? [] : buildSets(a);
   // Zone check at the zone distance if putted, else the standard distance with the most putts.
   const putted = S.STANDARD_FT.map((ft) => ({ ft, ...S.atFeet([{ results }], ft) })).filter((x) => x.attempts);
-  const checkFt = putted.some((x) => x.ft === zoneFt()) ? zoneFt()
-    : putted.sort((x, y) => y.attempts - x.attempts)[0]?.ft;
-  const here = checkFt ? S.atFeet([{ results }], checkFt) : { attempts: 0 };
-  let zoneLine = '';
-  if (here.attempts) {
-    const z = zoneReport([...state.sessions, { date: new Date().toISOString(), results }], checkFt);
-    zoneLine = `<div class="card accent"><strong>${fmtDist(z.ft)} zone check</strong>
-      <p class="small">This session: ${here.makes}/${here.attempts} (${fmtPct(here.pct)}). Including it, you are at
-      <strong>${fmtPct(z.v.pct)}</strong> over ${z.v.attempts} putts${z.useRecent ? ' in the last 30 days' : ''}.</p>
-      <p class="small ${zoneTone[z.v.status] || ''}">${zoneMessages[z.v.status](z.v)}</p></div>`;
+  const check = putted.find((x) => x.ft === zoneFt()) || putted.sort((x, y) => y.attempts - x.attempts)[0];
+  let zoneBlock = '';
+  if (check && a.kind !== 'jyly') {
+    const z = zoneReport([...state.sessions, { date: new Date().toISOString(), results }], check.ft);
+    zoneBlock = `<section class="panel">
+      <div class="panel-head"><h3>${fmtDist(z.ft)} with this session</h3>${pill(z.v)}</div>
+      <p class="small"><strong>${fmtPct(z.v.pct)}</strong> over ${plural(z.v.attempts, 'putt')}${z.useRecent ? ' in the last 30 days' : ''},
+        likely between ${fmtPct(z.v.lo)} and ${fmtPct(z.v.hi)}.</p>
+      ${advice(z, { after: true })}</section>`;
   }
-  return shell('practice', `
-    <h2>Session complete</h2>
-    <div class="card">
-      <p class="big-pct">${fmtPct(tot.pct)}</p>
-      <p class="muted center">${tot.makes} of ${tot.attempts} putts made</p>
-      ${rows}
-      ${a.kind === 'jyly' ? '' : (() => { const sets = buildSets(a); return sets.length ? `<p class="small">${setsLine(sets)}</p>` : ''; })()}
-    </div>
-    ${zoneLine}
-    <label class="field">Notes (wind, form cues, how it felt)
-      <textarea id="notes" rows="3" placeholder="e.g. focused on follow-through, light headwind"></textarea></label>
-    <div class="row">
-      <button class="btn primary" data-action="save-session" ${tot.attempts ? '' : 'disabled'}>Save session</button>
-      <button class="btn ghost" data-action="undo">Back</button>
-      <button class="btn ghost" data-action="discard">Discard</button>
+  return subpage('Session complete', `
+    <section class="result">
+      <p class="result-pct">${a.kind === 'jyly' ? S.jylyScore(a.rounds) : fmtPct(tot.pct)}</p>
+      <p class="muted">${a.kind === 'jyly' ? `JYLY score of 1000 · ${fmtPct(tot.pct)} made` : `${tot.makes} of ${plural(tot.attempts, 'putt')} made`}</p>
+    </section>
+    <section class="panel">
+      <ul class="list bars">${rows.join('')}</ul>
+      ${sets.length ? `<p class="small sets-line">${setsLine(sets)}</p>` : ''}
+    </section>
+    ${zoneBlock}
+    <label class="field">Notes
+      <textarea id="notes" rows="3" placeholder="Wind, form cues, how it felt">${esc(a.notes || '')}</textarea></label>
+    <div class="actions">
+      <button class="btn primary xl" data-action="save-session" ${tot.attempts ? '' : 'disabled'}>Save session</button>
+      <div class="actions-row"><button class="btn ghost" data-action="undo">Keep putting</button>
+      <button class="btn ghost danger" data-action="discard">Discard</button></div>
     </div>`);
 }
 
+// ---- quick log ----------------------------------------------------------------
 function viewQuickLog() {
-  return shell('practice', `
-    <h2>Log a session</h2>
-    <form id="quicklog" class="card">
-      <label class="field">Date <input type="date" name="date" value="${todayKey()}" required></label>
+  return subpage('Log a past session', `
+    <form id="quicklog" class="panel">
+      <label class="field">Date <input type="date" name="date" value="${todayKey()}" max="${todayKey()}" required></label>
       <table class="edit" id="ql-rows">
-        <tr><th>Distance (${unit()})</th><th>Putts</th><th>Made</th><th></th></tr>
+        <tr><th>Distance</th><th>Putts</th><th>Made</th><th></th></tr>
         ${qlRow()}
       </table>
-      <button type="button" class="btn ghost" data-action="ql-add">+ Add distance</button>
+      <button type="button" class="btn ghost small" data-action="ql-add">+ Add distance</button>
       <label class="field">Notes <textarea name="notes" rows="2"></textarea></label>
-      <div class="row"><button class="btn primary" type="submit">Save</button><a class="btn ghost" href="#practice">Cancel</a></div>
+      <button class="btn primary xl" type="submit">Save session</button>
     </form>`);
 }
 const qlRow = () => `<tr>
-  <td>${distanceSelect('name="d" required', unit(), S.standardDistances(unit())[0])}</td>
-  <td><input type="number" name="p" min="1" step="1" value="10" required inputmode="numeric"></td>
-  <td><input type="number" name="m" min="0" step="1" required inputmode="numeric"></td>
+  <td>${distanceSelect('name="d" required aria-label="Distance"', unit(), S.standardDistances(unit())[0])}</td>
+  <td><input type="number" name="p" min="1" step="1" value="10" required inputmode="numeric" aria-label="Putts"></td>
+  <td><input type="number" name="m" min="0" step="1" required inputmode="numeric" aria-label="Made"></td>
   <td><button type="button" class="x" data-action="row-del" aria-label="Remove">×</button></td></tr>`;
 
+// ---- history ------------------------------------------------------------------
 function viewHistory() {
   const list = [...state.sessions].sort((a, b) => b.date.localeCompare(a.date));
-  if (!list.length) return shell('history', `<h2>History</h2><p class="muted">No sessions yet. Go make some putts.</p>`);
-  return shell('history', `<h2>History</h2><ul class="list">${list
-    .map((s) => {
-      const t = S.sessionTotals(s);
-      const detail = S.byDistance([s], unit()).map((d) => `${d.distance}${unit()}: ${d.makes}/${d.attempts}`).join(' · ');
-      return `<li class="card hist">
-        <div class="hist-head"><strong>${esc(s.routineName)}</strong><span class="pct">${s.kind === 'jyly' ? `${s.score} pts` : fmtPct(t.pct)}</span></div>
-        <p class="muted small">${fmtDate(s.date)} · ${t.makes}/${t.attempts} made${s.kind === 'jyly' ? ` · ${fmtPct(t.pct)}` : ''}</p>
-        <p class="small">${esc(detail)}</p>
+  if (!list.length) {
+    return shell('history', 'History', `<div class="empty"><p><strong>No sessions yet</strong></p>
+      <p class="muted">Every session you save lands here, with makes at each distance.</p>
+      <a class="btn primary" href="#practice">Start practising</a></div>`);
+  }
+  const months = new Map();
+  for (const s of list) {
+    const key = new Date(s.date).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    months.set(key, [...(months.get(key) || []), s]);
+  }
+  return shell('history', 'History', [...months].map(([month, sessions]) => {
+    const t = totals(sessions);
+    return `<div class="section-head"><h2>${month}</h2><span class="muted small">${plural(t.attempts, 'putt')} · ${fmtPct(S.pct(t.makes, t.attempts))}</span></div>
+    <ul class="list rows">${sessions.map((s) => {
+      const st = S.sessionTotals(s);
+      return `<li class="hist">
+        <div class="hist-head"><span><strong>${esc(s.routineName)}</strong>
+          <span class="muted small">${fmtDate(s.date)} · ${st.makes}/${st.attempts} made</span></span>
+          <span class="hist-score">${s.kind === 'jyly' ? `${s.score}<small> pts</small>` : fmtPct(st.pct)}</span></div>
+        <p class="tags">${S.byDistance([s], unit()).map((d) => `<span>${d.distance} ${unit()} <b>${d.makes}/${d.attempts}</b></span>`).join('')}</p>
         ${s.sets?.length ? `<p class="small">${setsLine(s.sets)}</p>` : ''}
         ${s.notes ? `<p class="note small">${esc(s.notes)}</p>` : ''}
         <button class="link danger small" data-action="del-session" data-id="${s.id}">Delete</button>
       </li>`;
-    })
-    .join('')}</ul>`);
+    }).join('')}</ul>`;
+  }).join(''));
 }
 
-let progressDistance = null;
+// ---- progress -----------------------------------------------------------------
+let progressDistance = null; // selected distance, in the display unit
 function viewProgress() {
   const all = state.sessions;
-  if (!all.length) return shell('progress', `<h2>Progress</h2><p class="muted">Your stats will show up here after your first session.</p>`);
-  const u = unit();
-  const now = new Date();
-  const since30 = new Date(now - 30 * 864e5).toISOString();
-  const since7 = new Date(now - 7 * 864e5).toISOString();
-  const overall = all.reduce((a, s) => { const t = S.sessionTotals(s); a.m += t.makes; a.a += t.attempts; return a; }, { m: 0, a: 0 });
-  const week = S.sessionsSince(all, since7).reduce((n, s) => n + S.sessionTotals(s).attempts, 0);
-  const dists = S.byDistance(all, u);
-  const recent = new Map(S.byDistance(S.sessionsSince(all, since30), u).map((d) => [d.distance, d]));
-  if (!dists.some((d) => d.distance === progressDistance)) {
-    progressDistance = [...dists].sort((a, b) => b.attempts - a.attempts)[0].distance;
+  if (!all.length) {
+    return shell('progress', 'Progress', `<div class="empty"><p><strong>Nothing to chart yet</strong></p>
+      <p class="muted">After your first session this shows your make % at every distance and where your ${zoneTarget()}% zone sits.</p>
+      <a class="btn primary" href="#practice">Start practising</a></div>`);
   }
-  const trend = S.distanceTrend(all, u, progressDistance).map((p) => ({ date: p.date, value: p.pct }));
+  const u = unit();
+  const target = zoneTarget();
+  const recent = new Map(S.byDistance(S.sessionsSince(all, daysAgo(30)), u).map((d) => [d.distance, d]));
+  const rows = S.byDistance(all, u).map((d) => {
+    const j = judge(d, recent.get(d.distance) || { attempts: 0, makes: 0 });
+    return { distance: d.distance, ...j, pct: j.v.pct, lo: j.v.lo, hi: j.v.hi, attempts: j.v.attempts, status: j.v.status };
+  });
+  const zoneD = S.displayDistance(zoneFt(), u);
+  if (!rows.some((r) => r.distance === progressDistance)) {
+    progressDistance = rows.some((r) => r.distance === zoneD) ? zoneD : [...rows].sort((a, b) => b.all.attempts - a.all.attempts)[0].distance;
+  }
+  const sel = rows.find((r) => r.distance === progressDistance);
+  const selFt = S.STANDARD_FT.find((ft) => S.displayDistance(ft, u) === sel.distance);
+
+  const est = S.targetDistance(all, { target, minAttempts: 20 });
+  const headline = !est
+    ? `<p class="result-pct muted">–</p><p class="muted">20 putts at one distance gives a first estimate of your ${target}% distance.</p>`
+    : est.kind === 'between'
+      ? `<p class="result-pct">${fmtDist(est.ft)}</p><p class="muted">is about where you make ${target}% of your putts.</p>`
+      : est.kind === 'beyond'
+        ? `<p class="result-pct">${fmtDist(est.ft)}+</p><p class="muted">You make ${target}% or better everywhere you have putted. Putt further out to find the edge.</p>`
+        : `<p class="result-pct">under ${fmtDist(est.ft)}</p><p class="muted">You are below ${target}% everywhere you have putted. Putt closer in to find your zone.</p>`;
+
+  const t = totals(all);
+  const week = totals(S.sessionsSince(all, daysAgo(7))).attempts;
+  const trend = S.distanceTrend(all, u, sel.distance).map((p) => ({ date: p.date, value: p.pct }));
   const overallTrend = S.overallTrend(all.filter((s) => s.kind !== 'jyly')).map((p) => ({ date: p.date, value: p.pct }));
   const jyly = all.filter((s) => s.kind === 'jyly').sort((a, b) => a.date.localeCompare(b.date));
   const best = jyly.length ? Math.max(...jyly.map((s) => s.score)) : null;
-  const z = zoneReport(all);
-  const target = zoneTarget();
-  const est = S.targetDistance(all, { target, minAttempts: 20 });
-  const estLine = !est ? ''
-    : est.kind === 'between' ? `Across all your distances, your ${target}% distance looks like about <strong>${fmtDist(est.ft)}</strong>.`
-    : est.kind === 'beyond' ? `You are at ${target}%+ at every distance you have logged (out to ${fmtDist(est.ft)}). Log some putts further out to find your ${target}% distance.`
-    : `You are under ${target}% at every distance you have logged (in to ${fmtDist(est.ft)}). Log some putts closer in to find your ${target}% distance.`;
-  const zoneCard = `<div class="card accent">
-      <div class="hist-head"><h3>${target}% zone at</h3>${zoneSelect('zone-view')}</div>
-      ${z.v.attempts ? `<p class="big-pct small-pct">${fmtPct(z.v.pct)}</p>` : ''}
-      ${z.all.attempts ? `
-        <p class="small">${z.v.attempts} putts${z.useRecent ? ' in the last 30 days' : ''} ·
-          likely between <strong>${fmtPct(z.v.lo)}</strong> and <strong>${fmtPct(z.v.hi)}</strong> (95% range)</p>
-        <div class="zone-bar" aria-hidden="true">
-          <span class="zone-band" style="left:${target - ZONE_BAND}%;width:${2 * ZONE_BAND}%"></span>
-          <span class="zone-range" style="left:${z.v.lo}%;width:${Math.max(1, z.v.hi - z.v.lo)}%"></span>
-          <span class="zone-dot" style="left:${z.v.pct}%"></span>
-        </div>
-        <p class="small ${zoneTone[z.v.status] || ''}">${zoneMessages[z.v.status](z.v)}</p>
-        ${z.useRecent ? `<p class="muted small">All time: ${z.all.makes}/${z.all.attempts} (${fmtPct(z.all.pct)})</p>` : ''}`
-      : `<p class="small muted">No putts at ${fmtDist(z.ft)} yet. Start <strong>Zone practice</strong> on the Practice screen to build the number.</p>`}
-      ${estLine ? `<p class="small">${estLine}</p>` : ''}
-    </div>`;
-  const stdRows = S.STANDARD_FT.map((ft) => ({ ft, r: zoneReport(all, ft) })).filter((x) => x.r.all.attempts);
-  const standardsCard = stdRows.length ? `<div class="card">
-      <h3>Standard distances</h3>
-      <p class="muted small">Make % with its 95% range, judged against ${target}% ± ${ZONE_BAND}. Last 30 days once there are ${ZONE_MIN}+ putts there.</p>
-      <table><tr><th>Dist</th><th>Make %</th><th>Range</th><th>Verdict</th></tr>${stdRows
-        .map(({ ft, r }) => `<tr class="${ft === z.ft ? 'on' : ''}"><td>${fmtDist(ft)}</td>
-          <td>${fmtPct(r.v.pct)} <span class="muted small">(${r.v.attempts})</span></td>
-          <td class="small">${fmtPct(r.v.lo)}–${fmtPct(r.v.hi)}</td>
-          <td class="small ${zoneTone[r.v.status] || 'muted'}">${zoneShort[r.v.status](r.v)}</td></tr>`).join('')}</table>
-    </div>` : '';
 
-  return shell('progress', `
-    <h2>Progress</h2>
-    ${zoneCard}
-    ${standardsCard}
-    <section class="stats-row four">
-      <div class="stat"><span class="num">${all.length}</span><span class="lbl">sessions</span></div>
-      <div class="stat"><span class="num">${overall.a}</span><span class="lbl">total putts</span></div>
-      <div class="stat"><span class="num">${fmtPct(S.pct(overall.m, overall.a))}</span><span class="lbl">overall</span></div>
-      <div class="stat"><span class="num">${week}</span><span class="lbl">putts / 7 days</span></div>
+  return shell('progress', 'Progress', `
+    <section class="result left"><p class="eyebrow">Your ${target}% distance</p>${headline}</section>
+
+    <section class="panel">
+      <div class="panel-head"><h3>Make % by distance</h3>
+        <span class="legend small"><span class="key band"></span>${target - ZONE_BAND}–${Math.min(100, target + ZONE_BAND)}% zone</span></div>
+      ${rangeChart(rows, { target, band: ZONE_BAND, selected: sel.distance, unit: u })}
+      <p class="muted small">Dots are your make %. The bar through each is the range your true % very likely sits in; more putts make it shorter.</p>
+      <ul class="list dist-rows">${rows.map((r) => {
+        const delta = r.useRecent ? Math.round(r.recent.pct - r.all.pct) : 0;
+        return `<li><button class="dist-row ${r.distance === sel.distance ? 'on' : ''}" data-action="pick-distance" data-d="${r.distance}" aria-pressed="${r.distance === sel.distance}">
+          <span class="d">${r.distance} ${u}</span>
+          <span class="p"><b>${fmtPct(r.pct)}</b>${delta ? ` <span class="${delta > 0 ? 'up' : 'down'}">${delta > 0 ? '▲' : '▼'}${Math.abs(delta)}</span>` : ''}</span>
+          <span class="n muted">${r.attempts}${r.useRecent ? ' · 30d' : ''}</span>
+          ${pill(r.v)}</button></li>`;
+      }).join('')}</ul>
     </section>
 
-    <div class="card">
-      <h3>Make % by distance</h3>
-      <table class="bars"><tr><th>${u}</th><th>All time</th><th>Last 30 days</th></tr>${dists
-        .map((d) => {
-          const r = recent.get(d.distance);
-          const delta = r ? r.pct - d.pct : null;
-          return `<tr><td>${d.distance}</td>
-            <td><div class="bar"><span style="width:${d.pct}%"></span></div><span class="small">${fmtPct(d.pct)} <span class="muted">(${d.attempts})</span></span></td>
-            <td>${r ? `${fmtPct(r.pct)}${Math.round(delta) ? ` <span class="${delta > 0 ? 'up' : 'down'} small">${delta > 0 ? '▲' : '▼'}${Math.abs(Math.round(delta))}</span>` : ''}` : '<span class="muted">–</span>'}</td></tr>`;
-        })
-        .join('')}</table>
-    </div>
+    <section class="panel">
+      <div class="panel-head"><h3>${sel.distance} ${u}</h3>${pill(sel.v)}</div>
+      <p class="small"><strong>${fmtPct(sel.pct)}</strong> over ${plural(sel.attempts, 'putt')}${sel.useRecent ? ' in the last 30 days' : ''},
+        likely between <strong>${fmtPct(sel.lo)}</strong> and <strong>${fmtPct(sel.hi)}</strong>.
+        ${sel.useRecent ? `<span class="muted">All time ${fmtPct(sel.all.pct)} of ${sel.all.attempts}.</span>` : ''}</p>
+      ${selFt != null ? advice({ ft: selFt, v: sel.v }) : `<p class="advice">${zoneMessages[sel.v.status](sel.v)}</p>`}
+      ${selFt != null && selFt !== zoneFt() && !['too-easy', 'too-hard'].includes(sel.v.status)
+        ? `<button class="btn small" data-action="set-zone" data-ft="${selFt}">Practise at ${fmtDist(selFt)}</button>` : ''}
+      ${lineChart(trend, { label: `Make percentage at ${sel.distance} ${u} per session`, target })}
+    </section>
 
-    <div class="card">
-      <div class="hist-head"><h3>Trend at</h3>
-        <select id="trend-dist">${dists.map((d) => `<option value="${d.distance}" ${d.distance === progressDistance ? 'selected' : ''}>${d.distance} ${u}</option>`).join('')}</select></div>
-      ${lineChart(trend, { label: `Make percentage at ${progressDistance} ${u}` })}
-    </div>
+    <section class="figures">
+      <div><b>${all.length}</b><span>sessions</span></div>
+      <div><b>${t.attempts.toLocaleString()}</b><span>putts</span></div>
+      <div><b>${fmtPct(S.pct(t.makes, t.attempts))}</b><span>made overall</span></div>
+      <div><b>${week}</b><span>putts, last 7 days</span></div>
+    </section>
 
-    <div class="card"><h3>Overall make % (routines)</h3>${lineChart(overallTrend, { label: 'Overall make percentage per session' })}</div>
+    <section class="panel"><h3>Whole-session make %</h3>
+      <p class="muted small">Routines only. Moves with the distances you choose as well as your form.</p>
+      ${lineChart(overallTrend, { label: 'Overall make percentage per session' })}</section>
 
-    ${jyly.length ? `<div class="card"><div class="hist-head"><h3>JYLY score</h3><span>best <strong>${best}</strong></span></div>
-      ${lineChart(jyly.map((s) => ({ date: s.date, value: s.score })), { yMax: Math.max(400, Math.ceil(best / 100) * 100), suffix: '', label: 'JYLY score per session' })}</div>` : ''}`);
+    ${jyly.length ? `<section class="panel"><div class="panel-head"><h3>JYLY score</h3><span class="small">best <strong>${best}</strong></span></div>
+      ${lineChart(jyly.map((s) => ({ date: s.date, value: s.score })), { yMax: Math.max(400, Math.ceil(best / 100) * 100), suffix: '', label: 'JYLY score per session' })}</section>` : ''}`);
 }
 
+// ---- routines -----------------------------------------------------------------
 let editing = null; // routine being edited (a copy)
 function viewRoutines() {
   if (editing) return viewRoutineEdit();
-  return shell('routines', `
-    <h2>Routines</h2>
-    <ul class="list">${state.routines
-      .map((r) => `<li class="card hist"><div class="hist-head"><strong>${esc(r.name)}</strong>
-        <span>${r.kind === 'jyly' ? '' : `<button class="link small" data-action="edit-routine" data-id="${r.id}">Edit</button>`}
-        <button class="link danger small" data-action="del-routine" data-id="${r.id}">Delete</button></span></div>
-        <p class="muted small">${esc(routineSummary(r))}</p></li>`)
+  return subpage('Routines', `
+    <ul class="list rows">${state.routines
+      .map((r) => `<li class="hist"><div class="hist-head"><span><strong>${esc(r.name)}</strong>
+        <span class="muted small">${esc(routineSummary(r))}</span></span>
+        <span class="nowrap">${r.kind === 'jyly' ? '' : `<button class="link" data-action="edit-routine" data-id="${r.id}">Edit</button>`}
+        <button class="link danger" data-action="del-routine" data-id="${r.id}">Delete</button></span></div></li>`)
       .join('')}</ul>
-    <div class="row"><button class="btn primary" data-action="new-routine">New routine</button>
-    ${state.routines.some((r) => r.kind === 'jyly') ? '' : '<button class="btn ghost" data-action="add-jyly">Add JYLY</button>'}</div>`);
+    <div class="actions"><button class="btn primary" data-action="new-routine">New routine</button>
+    ${state.routines.some((r) => r.kind === 'jyly') ? '' : '<button class="btn ghost" data-action="add-jyly">Add JYLY</button>'}
+    <button class="btn ghost" data-action="reset-routines">Restore the default routines</button></div>`);
 }
 
 function viewRoutineEdit() {
   const r = editing;
-  return shell('routines', `
-    <h2>${state.routines.some((x) => x.id === r.id) ? 'Edit' : 'New'} routine</h2>
-    <form id="routine-form" class="card">
-      <label class="field">Name <input name="name" value="${esc(r.name)}" required maxlength="60"></label>
-      <label class="field">Unit <select name="unit">
-        <option value="ft" ${r.unit === 'ft' ? 'selected' : ''}>feet</option>
-        <option value="m" ${r.unit === 'm' ? 'selected' : ''}>metres</option></select></label>
-      <label class="field">Count each distance in <select name="count" id="routine-count">
-        <option value="putts" ${r.count !== 'sets' ? 'selected' : ''}>putts</option>
-        <option value="sets" ${r.count === 'sets' ? 'selected' : ''}>sets of my putters</option></select></label>
+  return `
+  <header class="top sub"><button class="icon-btn" data-action="cancel-edit" aria-label="Cancel">${icon('back')}</button>
+    <h1>${state.routines.some((x) => x.id === r.id) ? 'Edit' : 'New'} routine</h1></header>
+  <main>
+    <form id="routine-form" class="panel">
+      <label class="field">Name <input name="name" value="${esc(r.name)}" required maxlength="60" placeholder="e.g. Circle 1 warm-up"></label>
+      <div class="field-pair">
+        <label class="field">Unit <select name="unit">
+          <option value="ft" ${r.unit === 'ft' ? 'selected' : ''}>feet</option>
+          <option value="m" ${r.unit === 'm' ? 'selected' : ''}>metres</option></select></label>
+        <label class="field">Count in <select name="count" id="routine-count">
+          <option value="putts" ${r.count !== 'sets' ? 'selected' : ''}>putts</option>
+          <option value="sets" ${r.count === 'sets' ? 'selected' : ''}>sets</option></select></label>
+      </div>
       <table class="edit" id="st-rows"><tr><th>Distance</th><th id="st-count-head">${r.count === 'sets' ? 'Sets' : 'Putts'}</th><th></th></tr>
         ${r.stations.map((s) => stRow({ distance: s.distance, putts: r.count === 'sets' ? s.sets : s.putts }, r.unit)).join('')}</table>
-      <button type="button" class="btn ghost" data-action="st-add">+ Add station</button>
-      <div class="row"><button class="btn primary" type="submit">Save routine</button>
-      <button type="button" class="btn ghost" data-action="cancel-edit">Cancel</button></div>
-    </form>`);
+      <button type="button" class="btn ghost small" data-action="st-add">+ Add station</button>
+      <button class="btn primary xl" type="submit">Save routine</button>
+    </form>
+  </main>`;
 }
 const stRow = (s = { distance: '', putts: 2 }, u = 'ft') => `<tr>
-  <td>${distanceSelect('name="d" required', u, s.distance === '' ? S.standardDistances(u)[0] : s.distance)}</td>
-  <td><input type="number" name="p" min="1" max="100" step="1" value="${s.putts}" required inputmode="numeric"></td>
+  <td>${distanceSelect('name="d" required aria-label="Distance"', u, s.distance === '' ? S.standardDistances(u)[0] : s.distance)}</td>
+  <td><input type="number" name="p" min="1" max="100" step="1" value="${s.putts}" required inputmode="numeric" aria-label="Count"></td>
   <td><button type="button" class="x" data-action="row-del" aria-label="Remove">×</button></td></tr>`;
 
+// ---- settings -----------------------------------------------------------------
 function viewSettings() {
-  return shell('settings', `
-    <h2>Settings</h2>
-    <div class="card">
-      <label class="field">Show stats in
-        <select id="unit"><option value="ft" ${unit() === 'ft' ? 'selected' : ''}>feet</option>
-        <option value="m" ${unit() === 'm' ? 'selected' : ''}>metres</option></select></label>
-    </div>
-    <div class="card">
-      <h3>Practice zone</h3>
-      <p class="muted small">Practise where you make about ${zoneTarget()}% of your putts. Pick the distance on the Practice or Progress screen; stats are kept for every standard distance.</p>
-      <label class="field">Target make % <select id="zone-target">${[75, 80, 85, 90, 95]
-        .map((t) => `<option value="${t}" ${t === zoneTarget() ? 'selected' : ''}>${t}%</option>`).join('')}</select></label>
-    </div>
-    <div class="card">
+  const seg = (id, value, options) => `<div class="seg" role="group">${options
+    .map(([v, label]) => `<button data-action="set-setting" data-key="${id}" data-value="${v}" aria-pressed="${String(v) === String(value)}" class="${String(v) === String(value) ? 'on' : ''}">${label}</button>`).join('')}</div>`;
+  return subpage('Settings', `
+    <section class="panel">
+      <h3>Distances</h3>
+      <p class="muted small">Unit for stats and the zone. Each routine keeps its own unit.</p>
+      ${seg('unit', unit(), [['ft', 'Feet'], ['m', 'Metres']])}
+    </section>
+    <section class="panel">
+      <h3>Target make %</h3>
+      <p class="muted small">The zone is the distance where you make about this share of your putts: hard enough to stretch you, easy enough to groove a good stroke.</p>
+      ${seg('zoneTarget', zoneTarget(), [75, 80, 85, 90, 95].map((t) => [t, `${t}%`]))}
+    </section>
+    <section class="panel">
       <h3>Backup</h3>
-      <p class="muted small">Your data is stored only in this browser. Export a backup now and then, and import it to move to another device.</p>
-      <div class="row"><button class="btn" data-action="export">Export JSON</button>
-      <label class="btn">Import JSON<input type="file" id="import" accept="application/json" hidden></label></div>
-    </div>
-    <div class="card">
-      <h3>Reset</h3>
-      <div class="row"><button class="btn ghost" data-action="reset-routines">Restore default routines</button>
-      <button class="btn danger" data-action="wipe">Delete all data</button></div>
-    </div>`);
+      <p class="muted small">Your putts are stored only in this browser. Export a backup now and then, and import it to move to another phone.</p>
+      <div class="actions-row"><button class="btn" data-action="export">Export backup</button>
+      <label class="btn">Import backup<input type="file" id="import" accept="application/json" hidden></label></div>
+    </section>
+    <section class="panel">
+      <h3>Start over</h3>
+      <p class="muted small">Deletes every session and routine on this device.</p>
+      <button class="btn ghost danger" data-action="wipe">Delete all data</button>
+    </section>`);
 }
 
 // ---- render & routing -------------------------------------------------------
@@ -510,7 +578,13 @@ function render() {
   };
   app.innerHTML = (views[route] || viewPractice)();
 }
-window.addEventListener('hashchange', render);
+let lastRoute = null;
+window.addEventListener('hashchange', () => {
+  render();
+  const route = location.hash.slice(1);
+  if (route !== lastRoute) window.scrollTo(0, 0);
+  lastRoute = route;
+});
 
 // ---- actions ---------------------------------------------------------------
 function startRoutine(id) {
@@ -536,7 +610,7 @@ function saveActive() {
   const results = buildResults(a);
   const session = {
     id: uid(), date: a.startedAt, routineId: a.routineId, routineName: a.routineName, kind: a.kind, results,
-    notes: (document.getElementById('notes')?.value || '').trim(),
+    notes: (document.getElementById('notes')?.value ?? a.notes ?? '').trim(),
   };
   if (a.kind === 'jyly') session.score = S.jylyScore(a.rounds);
   else {
@@ -546,11 +620,37 @@ function saveActive() {
   state.sessions.push(session);
   state.active = null;
   persist();
-  go('history');
+  go('practice');
+  toast('Session saved');
+}
+
+function setSessionPutters(n) {
+  const a = state.active;
+  a.putters = state.settings.putters = clampPutters(n);
+  if (a.stationSets) {
+    for (let i = a.stationIdx; i < a.stations.length; i++) {
+      a.stations[i].putts = Math.max(a.log[i].length, a.stationSets[i] * a.putters);
+    }
+  }
 }
 
 const actions = {
   start: (el) => startRoutine(el.dataset.id),
+  step: (el) => {
+    const d = Number(el.dataset.d);
+    const key = el.dataset.key;
+    if (key === 'zoneSets') state.settings.zoneSets = Math.min(30, Math.max(1, zoneSets() + d));
+    if (key === 'putters') state.settings.putters = clampPutters(puttersPref() + d);
+    if (key === 'sessionPutters' && state.active) setSessionPutters(clampPutters(state.active.putters) + d);
+    persist(); render();
+  },
+  'set-zone': (el) => { state.settings.zoneFt = Number(el.dataset.ft); persist(); render(); },
+  'set-setting': (el) => {
+    const { key, value } = el.dataset;
+    state.settings[key] = key === 'unit' ? value : Number(value);
+    persist(); render();
+  },
+  'pick-distance': (el) => { progressDistance = Number(el.dataset.d); render(); },
   putt: (el) => {
     const a = state.active;
     const log = a.log[a.stationIdx];
@@ -576,17 +676,19 @@ const actions = {
   jyly: (el) => {
     const a = state.active;
     a.rounds.push({ distanceM: S.jylyCurrentDistance(a.rounds), makes: Number(el.dataset.makes) });
+    if (navigator.vibrate) navigator.vibrate(30);
     persist(); render();
   },
   undo: () => {
     const a = state.active;
+    if (!a) return;
     if (a.finishedEarly) a.finishedEarly = false;
     else if (a.kind === 'jyly') a.rounds.pop();
     else if (a.history?.length) {
-      // Undo the last entry: one putt, or a whole set.
+      // Undo the last entry: one putt, a whole set, or a skipped station.
       const h = a.history.pop();
       a.stationIdx = h.station;
-      a.log[h.station].splice(-h.n);
+      if (h.n) a.log[h.station].splice(-h.n);
     } else {
       if (a.stationIdx >= a.stations.length) a.stationIdx = a.stations.length - 1;
       if (!a.log[a.stationIdx].length && a.stationIdx > 0) a.stationIdx--;
@@ -594,13 +696,12 @@ const actions = {
     }
     persist(); render();
   },
-  skip: () => { state.active.stationIdx++; persist(); render(); },
+  skip: () => { const a = state.active; (a.history ||= []).push({ station: a.stationIdx, n: 0, makes: 0, skip: true }); a.stationIdx++; persist(); render(); },
   'finish-early': () => { state.active.finishedEarly = true; persist(); render(); },
   'save-session': saveActive,
-  discard: () => {
-    if (!confirm('Discard this session?')) return;
+  discard: () => ask('Discard this session? Its putts will not be saved.', 'Discard', () => {
     state.active = null; persist(); go('practice');
-  },
+  }),
   'ql-add': () => document.getElementById('ql-rows').insertAdjacentHTML('beforeend', qlRow()),
   'st-add': () => document.getElementById('st-rows')
     .insertAdjacentHTML('beforeend', stRow({ distance: '', putts: document.getElementById('routine-count').value === 'sets' ? 2 : 10 },
@@ -614,26 +715,25 @@ const actions = {
     const table = el.closest('table');
     if (table.querySelectorAll('tr').length > 2) el.closest('tr').remove();
   },
-  'del-session': (el) => {
-    if (!confirm('Delete this session?')) return;
+  'del-session': (el) => ask('Delete this session? Its putts leave your stats.', 'Delete', () => {
     state.sessions = state.sessions.filter((s) => s.id !== el.dataset.id); persist(); render();
+  }),
+  'new-routine': () => {
+    editing = { id: uid(), name: '', kind: 'stations', unit: unit(), count: 'sets', stations: [{ distance: unit() === 'm' ? 6 : 20, sets: 2 }] };
+    render();
   },
-  'new-routine': () => { editing = { id: uid(), name: '', kind: 'stations', unit: unit(), stations: [{ distance: 20, putts: 10 }] }; render(); },
   'edit-routine': (el) => { editing = structuredClone(state.routines.find((r) => r.id === el.dataset.id)); render(); },
   'cancel-edit': () => { editing = null; render(); },
-  'del-routine': (el) => {
-    if (!confirm('Delete this routine? Past sessions are kept.')) return;
+  'del-routine': (el) => ask('Delete this routine? Past sessions are kept.', 'Delete', () => {
     state.routines = state.routines.filter((r) => r.id !== el.dataset.id); persist(); render();
-  },
+  }),
   'add-jyly': () => { state.routines.push(structuredClone(DEFAULT_ROUTINES.find((r) => r.kind === 'jyly'))); persist(); render(); },
-  'reset-routines': () => {
-    if (!confirm('Replace your routines with the defaults? Sessions are kept.')) return;
+  'reset-routines': () => ask('Replace your routines with the defaults? Sessions are kept.', 'Replace', () => {
     state.routines = structuredClone(DEFAULT_ROUTINES); persist(); render();
-  },
-  wipe: () => {
-    if (!confirm('Delete ALL sessions and routines? This cannot be undone.')) return;
+  }),
+  wipe: () => ask('Delete ALL sessions and routines on this device? This cannot be undone.', 'Delete everything', () => {
     localStorage.clear(); state = load(); go('practice');
-  },
+  }),
   export: () => {
     const blob = new Blob([JSON.stringify({ ...state, active: null }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -651,43 +751,32 @@ app.addEventListener('click', (e) => {
   if (fn) { e.preventDefault(); fn(el); }
 });
 
+// Notes survive a re-render or a reload while the finish screen is open.
+app.addEventListener('input', (e) => {
+  if (e.target.id === 'notes' && state.active) { state.active.notes = e.target.value; persist(); }
+});
+
 app.addEventListener('change', (e) => {
-  if (e.target.id === 'unit') { state.settings.unit = e.target.value; persist(); render(); }
-  if (e.target.id === 'zone-dist' || e.target.id === 'zone-view') { state.settings.zoneFt = Number(e.target.value); persist(); render(); }
-  if (e.target.id === 'zone-sets') { state.settings.zoneSets = Number(e.target.value); persist(); render(); }
-  if (e.target.id === 'zone-target') { state.settings.zoneTarget = Number(e.target.value); persist(); render(); }
   if (e.target.name === 'unit' && e.target.closest('#routine-form')) {
     // Switch every distance dropdown to the new unit's standards, keeping the nearest mark.
     const to = e.target.value;
     const from = to === 'm' ? 'ft' : 'm';
     e.target.form.querySelectorAll('select[name=d]').forEach((sel) => {
       const near = S.nearestStandard(S.fromFt(S.toFt(Number(sel.value), from), to), to);
-      sel.outerHTML = distanceSelect('name="d" required', to, near);
+      sel.outerHTML = distanceSelect('name="d" required aria-label="Distance"', to, near);
     });
   }
   if (e.target.id === 'routine-count') {
     document.getElementById('st-count-head').textContent = e.target.value === 'sets' ? 'Sets' : 'Putts';
   }
-  if (e.target.id === 'putters-pref') { state.settings.putters = clampPutters(e.target.value); persist(); render(); }
-  if (e.target.id === 'session-putters' && state.active) {
-    const a = state.active;
-    a.putters = state.settings.putters = clampPutters(e.target.value);
-    if (a.stationSets) {
-      for (let i = a.stationIdx; i < a.stations.length; i++) {
-        a.stations[i].putts = Math.max(a.log[i].length, a.stationSets[i] * a.putters);
-      }
-    }
-    persist(); render();
-  }
-  if (e.target.id === 'trend-dist') { progressDistance = Number(e.target.value); render(); }
   if (e.target.id === 'import') {
     const file = e.target.files[0];
     if (!file) return;
     file.text().then((txt) => {
       try {
         state = validateImport(JSON.parse(txt)); persist();
-        alert(`Imported ${state.sessions.length} sessions.`); go('history');
-      } catch (err) { alert(err.message); }
+        go('history'); toast(`Imported ${plural(state.sessions.length, 'session')}`);
+      } catch (err) { toast(err instanceof SyntaxError ? 'That file is not a backup from this app.' : err.message); }
     });
   }
 });
@@ -702,14 +791,14 @@ app.addEventListener('submit', (e) => {
   const form = e.target;
   if (form.id === 'quicklog') {
     const data = rows(form);
-    if (data.some((r) => r.m > r.p)) { alert('Made putts can’t be more than putts taken.'); return; }
+    if (data.some((r) => r.m > r.p)) { toast('Made can’t be more than putts taken.'); return; }
     const date = form.date.value;
     state.sessions.push({
       id: uid(), date: new Date(date + 'T12:00:00').toISOString(), routineId: null, routineName: 'Logged session',
       kind: 'manual', notes: form.notes.value.trim(),
       results: data.map((r) => ({ ft: S.toFt(r.d, unit()), attempts: r.p, makes: r.m })),
     });
-    persist(); go('history');
+    persist(); go('history'); toast('Session saved');
   }
   if (form.id === 'routine-form') {
     editing.name = form.name.value.trim();
@@ -727,4 +816,5 @@ app.addEventListener('submit', (e) => {
   }
 });
 
+lastRoute = location.hash.slice(1);
 render();

@@ -129,3 +129,31 @@ test('standard distances: 18 ft default is listed, nearestStandard snaps', () =>
   assert.equal(S.nearestStandard(S.fromFt(18, 'm'), 'm'), 5);
   assert.equal(S.nearestStandard(60, 'ft'), 66);
 });
+
+test('stepStandard walks the standard marks and stops at the ends', () => {
+  assert.equal(S.stepStandard(18, 1), 20);
+  assert.equal(S.stepStandard(18, -1), 15);
+  assert.equal(S.stepStandard(10, -1), null);
+  assert.equal(S.stepStandard(66, 1), null);
+  assert.equal(S.stepStandard(17, 1), null);
+});
+
+test('zoneMove only moves on a clear verdict', () => {
+  assert.equal(S.zoneMove('too-easy', 18), 20);
+  assert.equal(S.zoneMove('too-hard', 18), 15);
+  assert.equal(S.zoneMove('in-zone', 18), null);
+  assert.equal(S.zoneMove('leaning-easy', 18), null);
+  assert.equal(S.zoneMove('need-more', 18), null);
+  assert.equal(S.zoneMove('too-easy', 66), null);
+});
+
+test('sessionProgress weights stations by putts and counts skipped ones as done', () => {
+  const stations = [{ distance: 10, putts: 10 }, { distance: 20, putts: 30 }];
+  const p = S.sessionProgress(stations, [[true, false, true, true, true], []], 0);
+  assert.equal(p.total, 40);
+  assert.equal(p.parts[0].fraction, 0.5);
+  assert.equal(p.fraction, 5 / 40);
+  const skipped = S.sessionProgress(stations, [[true], [true, true, true]], 1);
+  assert.equal(skipped.parts[0].fraction, 1);
+  assert.equal(skipped.fraction, (10 + 3) / 40);
+});

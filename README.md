@@ -7,42 +7,44 @@ buttons, and watch your make % improve at each distance.
 No accounts, no server, no build step. Data stays in your browser
 (localStorage); use **Settings → Export JSON** for backups or to move devices.
 
-## Features
+## How it is laid out
 
-- **Routines** – station-based drills (distance × putts). Comes with
-  Circle 1 Ladder (2 sets each at 10–30 ft), C1X Grind and Circle 2 Reps; create and edit your own in
-  feet or metres.
-- **JYLY** – the classic 20-round, 5-disc game (5–10 m, max 1000 points),
-  with automatic distance changes and scoring.
-- **Putters per set** – pick how many discs you putt with (Practice screen,
-  or mid-session). With more than one, throw them all, walk up and tap how
-  many went in; Undo takes back the whole set. Set scores and clean sets
-  (all in) show on the finish screen and in History. Choose 1 to tap each
-  putt as Make / Miss. A routine can count each distance in putts or in
-  **sets of your putters** (chosen in the routine editor); set-based routines
-  work out their putt count from your putters setting, e.g. 8 sets × 6 = 48.
-- **Live session screen** – Make / Miss buttons, progress pips, undo, skip a
-  station, finish early, add notes. An in-progress session survives a page
-  reload.
-- **Quick log** – enter a session after the fact (distance / putts / made).
-- **History** – every session with per-distance breakdown and notes.
+The app is built around one idea: **practise at the distance where you make
+about 85% of your putts**, and let the numbers tell you when to move.
+
+- **Practice** (home) – the zone card leads. Tap a standard distance (each
+  shows your make % there), set sets and putters with the steppers, and start.
+  When the stats say the distance is clearly too easy or too hard, the card
+  says so and offers a one-tap move to the next mark. Routines sit below, then
+  "Log a past session" for putts entered after the fact.
+- **Session** – full screen, no tabs, built for one thumb outdoors. Huge
+  distance, a progress bar with one segment per station, a tally of each set,
+  and the entry pad at the bottom: tap how many went in, with a full-width
+  "All N" key. With one putter it becomes Miss / Make. Undo (top right) takes
+  back the last set, putt or skipped station; × pauses and the session survives
+  a reload. Putters can be changed mid-session.
+- **Session complete** – make %, a bar per distance, set scores, a zone check
+  that includes the session you just finished, and notes.
+- **Progress** – opens with your 85% distance, estimated from every distance
+  you have logged. Below it one chart plots make % against distance to scale,
+  with the zone band, a 95% range on every point and the Circle 1 / Circle 2
+  edges. Tap a distance in the list for its verdict (too easy / in the zone /
+  too hard, last 30 days once there are 50+ putts) and its trend. Totals,
+  whole-session trend and JYLY scores follow.
+- **History** – sessions by month with makes per distance, set scores and notes.
+- **Settings** (gear, top right) – feet or metres, target make %, backup, reset.
+
+Also in there:
+
+- **Routines** – station drills counted in putts or in **sets of your
+  putters** (8 sets × 6 putters = 48 putts). Ships with Circle 1 Ladder, C1X
+  Grind and Circle 2 Reps; edit them or add your own from Practice → Edit.
+- **JYLY** – the 20-round, 5-disc game (5–10 m, max 1000 points) with automatic
+  distance changes and scoring.
 - **Standard distances** – every distance is picked from a fixed list
   (10, 15, 18, 20, 25, 30, 33, 40, 50, 66 ft; 3–10, 15, 20 m) so stats pile up
-  at the same marks. 10–30 ft in 5 ft steps is the common practice ladder,
-  33 ft is the edge of Circle 1 and 66 ft the edge of Circle 2. Older custom
-  distances are kept and shown as "(old)" in the routine editor.
-- **Zone practice** (Practice screen) – pick a standard distance (default
-  18 ft) and a number of sets, and putt there.
-- **Practice zone stats** – practise where you make about 85% of putts. Progress
-  shows your make % at any standard distance with a 95% range,
-  says when you have enough putts for a reliable read (50+), and tells you
-  whether to move in, move back or stay. It also estimates your 85% distance
-  from every distance you have logged, and a table judging each standard
-  distance you have putted (too easy / in the zone / too hard). The target %
-  is set in Settings; the session screen shows a running make % as you putt.
-- **Progress** – total putts, overall make %, putts this week, day streak,
-  make % by distance (all-time vs. last 30 days), trend charts per distance
-  with a 5-session rolling average, and JYLY score history.
+  at the same marks. 33 ft is the edge of Circle 1 and 66 ft the edge of
+  Circle 2. Older custom distances are kept and shown as "(old)" in the editor.
 
 ## Project layout
 
@@ -50,9 +52,10 @@ No accounts, no server, no build step. Data stays in your browser
 | --- | --- |
 | `index.html` | Page shell; loads `src/app.js` as an ES module |
 | `src/app.js` | Views (template strings), routing (`#hash`), event handling |
+| `src/charts.js` | SVG chart builders: data in, markup out, no app state |
 | `src/stats.js` | Pure logic: unit conversion, stats, JYLY scoring, streaks |
 | `src/store.js` | localStorage persistence, default routines, import validation |
-| `src/styles.css` | All styles (light + dark) |
+| `src/styles.css` | All styles (light + dark); every colour is a token at the top |
 | `tests/` | `node:test` tests for `src/stats.js` |
 | `.github/workflows/ci.yml` | Runs the tests on every PR and push to `main` |
 | `vercel.json` | Cache headers for the deployed site |
