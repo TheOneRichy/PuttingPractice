@@ -30,7 +30,7 @@ about 85% of your putts**, and let the numbers tell you when to move.
   you have logged. Below it one chart plots make % against distance to scale,
   with the zone band, a 95% range on every point and the Circle 1 / Circle 2
   edges. Tap a distance in the list for its verdict (too easy / in the zone /
-  too hard, last 30 days once there are 50+ putts) and its trend. Totals,
+  too hard, last 30 days once there are 48+ putts) and its trend. Totals,
   whole-session trend, JYLY and Perfect Putt 360 scores follow.
 - **History** – sessions by month with makes per distance, set scores and notes.
 - **Settings** (gear, top right) – feet or metres, target make %, backup,

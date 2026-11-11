@@ -76,7 +76,8 @@ test('wilson interval brackets the observed % and narrows with more putts', () =
 
 test('zoneVerdict needs enough putts, then calls the zone', () => {
   assert.equal(S.zoneVerdict({ makes: 9, attempts: 10 }).status, 'need-more');
-  assert.equal(S.zoneVerdict({ makes: 9, attempts: 10 }).needed, 40);
+  assert.equal(S.zoneVerdict({ makes: 9, attempts: 10 }).needed, 38);
+  assert.equal(S.zoneVerdict({ makes: 41, attempts: 48 }).status, 'in-zone'); // 8 sets of 6 is enough
   assert.equal(S.zoneVerdict({ makes: 43, attempts: 50 }).status, 'in-zone');
   assert.equal(S.zoneVerdict({ makes: 120, attempts: 200 }).status, 'too-hard');
   assert.equal(S.zoneVerdict({ makes: 198, attempts: 200 }).status, 'too-easy');
