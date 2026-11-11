@@ -904,8 +904,21 @@ app.addEventListener('click', (e) => {
   const el = e.target.closest('[data-action]');
   if (!el || el.disabled) return;
   const fn = actions[el.dataset.action];
-  if (fn) { e.preventDefault(); fn(el); }
+  if (!fn) return;
+  e.preventDefault();
+  const key = el.classList.contains('key') ? keySelector(el) : null;
+  fn(el);
+  if (key) replayTap(key, el.dataset.action !== 'pp360-toggle');
 });
+
+/** Scoring keys are redrawn by the tap that hits them, so find the same key again by what it logs. */
+const keySelector = (el) => `.key[data-action="${el.dataset.action}"]` +
+  ['makes', 'made', 'key'].filter((k) => k in el.dataset).map((k) => `[data-${k}="${el.dataset[k]}"]`).join('');
+/** Play the press on the redrawn key, and drop the new result into the tally. */
+function replayTap(selector, scored) {
+  app.querySelector(selector)?.classList.add('tapped');
+  if (scored) [...app.querySelectorAll('.tally .slot.done, .tally .pip.make, .tally .pip.miss')].at(-1)?.classList.add('landed');
+}
 
 // Notes survive a re-render or a reload while the finish screen is open.
 app.addEventListener('input', (e) => {

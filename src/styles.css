@@ -230,7 +230,20 @@ textarea { min-height: 0; resize: vertical; }
   min-height: 64px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--surface);
   font-size: 1.6rem; font-weight: 800; font-variant-numeric: tabular-nums;
 }
-.key:active { filter: brightness(.9); transform: scale(.98); }
+.key:active { filter: brightness(.85); transform: scale(.93); }
+/* The pad is redrawn on every tap, so the press is replayed on the fresh key:
+   a squash, a bounce back and a ring that spreads out from it. */
+.key { --ring: var(--brand); transition: transform .08s ease-out, filter .08s ease-out; }
+.key.zero, .key.miss { --ring: var(--miss); }
+.key.all { --ring: var(--make); }
+.key.tapped { animation: key-tap .45s cubic-bezier(.2, .9, .3, 1.2); }
+@keyframes key-tap {
+  0% { transform: scale(.88); filter: brightness(.8); box-shadow: 0 0 0 0 color-mix(in srgb, var(--ring) 80%, transparent), inset 0 0 0 60px color-mix(in srgb, var(--ring) 40%, transparent); }
+  45% { transform: scale(1.05); filter: brightness(1.08); box-shadow: 0 0 0 9px color-mix(in srgb, var(--ring) 45%, transparent), inset 0 0 0 60px color-mix(in srgb, var(--ring) 20%, transparent); }
+  100% { transform: scale(1); filter: none; box-shadow: 0 0 0 18px transparent, inset 0 0 0 60px transparent; }
+}
+.slot.landed, .pip.landed { animation: tally-in .4s cubic-bezier(.2, .9, .3, 1.4); }
+@keyframes tally-in { from { transform: scale(.3); opacity: 0; } 60% { transform: scale(1.35); opacity: 1; } }
 .key.zero { color: var(--miss); }
 .key.all { min-height: 84px; background: var(--make); border-color: var(--make); color: #fff; }
 .key.miss { min-height: 120px; background: var(--miss); border-color: var(--miss); color: #fff; }
