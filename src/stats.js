@@ -333,3 +333,22 @@ export function feedbackMailto(message, details = '') {
   // encodeURIComponent, not URLSearchParams: mail apps show "+" literally instead of as a space.
   return `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent('Putting Practice feedback')}&body=${encodeURIComponent(body)}`;
 }
+
+/**
+ * Web3Forms delivers a posted message to the inbox its access key belongs to, so feedback
+ * can be sent from inside the app. The key is a public identifier, not a secret: it can only
+ * send mail to its owner. Leave it empty and feedback falls back to the sender's mail app.
+ */
+export const FEEDBACK_KEY = '';
+export const FEEDBACK_URL = 'https://api.web3forms.com/submit';
+
+/** The JSON body for FEEDBACK_URL. */
+export function feedbackPayload(key, { message, name = '', details = '' }) {
+  const from = name.trim();
+  return {
+    access_key: key,
+    subject: `Putting Practice feedback${from ? ` from ${from}` : ''}`,
+    from_name: from || 'Putting Practice',
+    message: [message.trim(), details && `--\n${details}`].filter(Boolean).join('\n\n'),
+  };
+}

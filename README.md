@@ -33,7 +33,7 @@ about 85% of your putts**, and let the numbers tell you when to move.
   whole-session trend, JYLY and Perfect Putt 360 scores follow.
 - **History** – sessions by month with makes per distance, set scores and notes.
 - **Settings** (gear, top right) – feet or metres, target make %, backup,
-  feedback (opens the sender's mail app with a message addressed to Richard), reset.
+  feedback, reset.
 
 Also in there:
 
@@ -107,6 +107,15 @@ a cached `src/app.js` would keep serving old code after a deploy — on a phone
 with the app on the home screen, indefinitely. The files are a few KB and
 revalidation returns a `304`, so always checking costs effectively nothing and
 removes a whole class of "why is my fix not showing up" confusion.
+
+### Feedback
+
+Settings → Feedback posts the message to [Web3Forms](https://web3forms.com),
+which emails it to the inbox its access key was created for. Paste that key
+into `FEEDBACK_KEY` in `src/stats.js`. It is a public identifier, safe to
+commit: all it can do is send mail to its owner. While the key is empty, or
+when a send fails, the form hands the message to the sender's own mail app
+instead.
 
 ### CI
 
