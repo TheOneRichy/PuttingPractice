@@ -27,7 +27,7 @@ const totals = (sessions) => sessions.reduce((a, s) => {
 const routineSummary = (r) => {
   if (r.kind === 'jyly') return '20 rounds of 5 putts · 5–10 m';
   const st = r.stations;
-  const dists = `${[...new Set(st.map((s) => s.distance))].join(' · ')} ${r.unit}`;
+  const dists = `${[...new Set(st.map((s) => distNum(S.toFt(s.distance, r.unit))))].join(' · ')} ${unit()}`;
   const putts = S.expandStations(r, puttersPref()).reduce((n, s) => n + s.putts, 0);
   return `${dists} · ${plural(putts, 'putt')}`;
 };
@@ -68,7 +68,14 @@ const zoneTarget = () => Number(state.settings.zoneTarget) || 85;
 const ZONE_MIN = 50; // putts before the app makes a call
 const ZONE_BAND = 5; // ± % around the target that counts as "in the zone"
 const zoneOpts = () => ({ target: zoneTarget(), band: ZONE_BAND, minAttempts: ZONE_MIN });
-const fmtDist = (ft) => (unit() === 'm' ? `${S.fromFt(ft, 'm').toFixed(1)} m` : `${Math.round(ft)} ft`);
+/** A distance in the unit chosen in Settings: whole feet, or metres to one decimal (no trailing .0). */
+const distNum = (ft) => (unit() === 'm' ? String(Number(S.fromFt(ft, 'm').toFixed(1))) : String(Math.round(ft)));
+const fmtDist = (ft) => `${distNum(ft)} ${unit()}`;
+/** Session title. Zone practice is named from its distance so it follows the unit setting. */
+const sessionName = (x) => {
+  const zone = /^zone-(\d+)$/.exec(x.routineId || '');
+  return zone && String(x.routineName).startsWith('Zone practice') ? `Zone practice · ${fmtDist(Number(zone[1]))}` : x.routineName;
+};
 const zoneMessages = {
   'need-more': (v) => `${plural(v.needed, 'more putt')} here and you get a reliable read.`,
   'in-zone': () => 'In the zone. This is the distance to practise.',
@@ -170,7 +177,7 @@ function zoneHero() {
   const chips = S.STANDARD_FT.map((ft) => {
     const r = ft === z.ft ? z : zoneReport(state.sessions, ft);
     return `<button class="chip ${ft === z.ft ? 'on' : ''} ${r.v.status}" data-action="set-zone" data-ft="${ft}" aria-pressed="${ft === z.ft}">
-      <b>${unit() === 'm' ? S.fromFt(ft, 'm').toFixed(1) : ft}</b><span>${r.all.attempts ? fmtPct(r.v.pct) : '–'}</span></button>`;
+      <b>${distNum(ft)}</b><span>${r.all.attempts ? fmtPct(r.v.pct) : '–'}</span></button>`;
   }).join('');
   const read = z.all.attempts
     ? `<p class="hero-pct">${fmtPct(z.v.pct)}</p><p class="muted small">${plural(z.v.attempts, 'putt')}${z.useRecent ? ' · 30 days' : ''}</p>${pill(z.v)}`
@@ -194,7 +201,7 @@ function zoneHero() {
 function viewPractice() {
   const resume = state.active
     ? `<div class="resume"><div><strong>Session in progress</strong>
-        <p class="muted small">${esc(state.active.routineName)}</p></div>
+        <p class="muted small">${esc(sessionName(state.active))}</p></div>
         <div class="resume-btns"><button class="btn ghost small" data-action="discard">Discard</button>
         <a class="btn primary small" href="#session">Resume</a></div></div>`
     : '';
@@ -276,11 +283,11 @@ function viewSession() {
       <button class="key all" data-action="putt" data-made="1">Make</button>
     </div>`;
   return focusShell({
-    title: esc(a.routineName),
+    title: esc(sessionName(a)),
     segments: prog.parts.map((p) => ({ weight: p.putts, fraction: p.fraction })),
     top: `
       <p class="eyebrow">${a.stations.length > 1 ? `Station ${a.stationIdx + 1} of ${a.stations.length} · ` : ''}${where}</p>
-      <p class="distance">${st.distance}<small>${a.unit}</small></p>
+      <p class="distance">${distNum(S.toFt(st.distance, a.unit))}<small>${unit()}</small></p>
       <div class="tally">${tally}</div>
       <p class="running">${sofar.length ? `<strong>${fmtPct(S.pct(sofarMakes, sofar.length))}</strong> · ${sofarMakes} of ${sofar.length} made` : 'Throw them all, walk up, tap the count.'}</p>`,
     pad,
@@ -299,7 +306,7 @@ function viewJyly(a) {
     title: 'JYLY',
     segments: Array.from({ length: S.JYLY_ROUNDS }, (_, i) => ({ weight: 1, fraction: i < a.rounds.length ? 1 : 0 })),
     top: `
-      <p class="eyebrow">Round ${a.rounds.length + 1} of ${S.JYLY_ROUNDS} · ${(dist * S.FT_PER_M).toFixed(0)} ft</p>
+      <p class="eyebrow">Round ${a.rounds.length + 1} of ${S.JYLY_ROUNDS}${unit() === 'ft' ? ` · ${(dist * S.FT_PER_M).toFixed(0)} ft` : ''}</p>
       <p class="distance">${dist}<small>m</small></p>
       <div class="tally">${Array.from({ length: S.JYLY_ROUNDS }, (_, i) => slot(a.rounds[i]?.makes, S.JYLY_PUTTS, i === a.rounds.length)).join('')}</div>
       <p class="running">Score <strong>${S.jylyScore(a.rounds)}</strong></p>`,
@@ -330,7 +337,7 @@ function viewFinish(a) {
   const tot = S.sessionTotals({ results });
   const rows = a.kind === 'jyly'
     ? S.byDistance([{ results }], 'm').map((d) => barRow(`${d.distance} m`, d.makes, d.attempts))
-    : a.stations.map((st, i) => (a.log[i].length ? barRow(`${st.distance} ${a.unit}`, a.log[i].filter(Boolean).length, a.log[i].length) : ''));
+    : a.stations.map((st, i) => (a.log[i].length ? barRow(fmtDist(S.toFt(st.distance, a.unit)), a.log[i].filter(Boolean).length, a.log[i].length) : ''));
   const sets = a.kind === 'jyly' ? [] : buildSets(a);
   // Zone check at the zone distance if putted, else the standard distance with the most putts.
   const putted = S.STANDARD_FT.map((ft) => ({ ft, ...S.atFeet([{ results }], ft) })).filter((x) => x.attempts);
@@ -402,7 +409,7 @@ function viewHistory() {
     <ul class="list rows">${sessions.map((s) => {
       const st = S.sessionTotals(s);
       return `<li class="hist">
-        <div class="hist-head"><span><strong>${esc(s.routineName)}</strong>
+        <div class="hist-head"><span><strong>${esc(sessionName(s))}</strong>
           <span class="muted small">${fmtDate(s.date)} · ${st.makes}/${st.attempts} made</span></span>
           <span class="hist-score">${s.kind === 'jyly' ? `${s.score}<small> pts</small>` : fmtPct(st.pct)}</span></div>
         <p class="tags">${S.byDistance([s], unit()).map((d) => `<span>${d.distance} ${unit()} <b>${d.makes}/${d.attempts}</b></span>`).join('')}</p>
@@ -548,7 +555,7 @@ function viewSettings() {
   return subpage('Settings', `
     <section class="panel">
       <h3>Distances</h3>
-      <p class="muted small">Unit for stats and the zone. Each routine keeps its own unit.</p>
+      <p class="muted small">Every distance in the app is shown in this unit, including routines written in the other one.</p>
       ${seg('unit', unit(), [['ft', 'Feet'], ['m', 'Metres']])}
     </section>
     <section class="panel">
