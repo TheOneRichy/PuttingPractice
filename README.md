@@ -43,7 +43,9 @@ Also in there:
   distance changes and scoring.
 - **Standard distances** – every distance is picked from a fixed list
   (10, 15, 18, 20, 25, 30, 33, 40, 50, 66 ft; 3–10, 15, 20 m) so stats pile up
-  at the same marks. 33 ft is the edge of Circle 1 and 66 ft the edge of
+  at the same marks. The unit chosen in Settings decides which list the zone
+  uses, and a routine written in the other unit is putted at the nearest whole
+  foot or metre (15 ft becomes 5 m). 33 ft is the edge of Circle 1 and 66 ft the edge of
   Circle 2. Older custom distances are kept and shown as "(old)" in the editor.
 
 ## Project layout
