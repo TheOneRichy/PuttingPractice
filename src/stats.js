@@ -339,7 +339,7 @@ export function feedbackMailto(message, details = '') {
  * can be sent from inside the app. The key is a public identifier, not a secret: it can only
  * send mail to its owner. Leave it empty and feedback falls back to the sender's mail app.
  */
-export const FEEDBACK_KEY = '';
+export const FEEDBACK_KEY = 'ddc9951e-af56-48c3-8b66-a453667f54a8';
 export const FEEDBACK_URL = 'https://api.web3forms.com/submit';
 
 /** The JSON body for FEEDBACK_URL. */
