@@ -24,6 +24,7 @@ export function startAnalytics(settings) {
     if (!ph?.init) return;
     ph.init(S.ANALYTICS_KEY, {
       api_host: S.ANALYTICS_HOST,
+      ui_host: S.ANALYTICS_UI_HOST, // api_host is our own domain, so name the real one for links
       persistence: 'localStorage', // a random ID next to the app's own data; no cookies
       person_profiles: 'identified_only',
       autocapture: false, // only the events named in app.js, so typed text can never be picked up

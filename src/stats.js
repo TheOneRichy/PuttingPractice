@@ -347,8 +347,16 @@ export function feedbackPayload(key, { message, name = '', details = '' }) {
  * public, write-only identifier, safe to commit. Leave it empty and nothing is loaded or sent.
  */
 export const ANALYTICS_KEY = 'phc_KxA7Ev83kLkS2bU0hvaOJ34Bbuifbgf1xN2Pix3gXQM';
-export const ANALYTICS_HOST = 'https://us.i.posthog.com';
-export const ANALYTICS_SCRIPT = 'https://us-assets.i.posthog.com/static/array.js';
+/**
+ * Same-origin paths, rewritten to PostHog by vercel.json. Going through our own domain is what
+ * makes the numbers real: content blockers match PostHog by hostname, so pointing the SDK
+ * straight at posthog.com meant the script was dropped before it ran and nothing was ever
+ * recorded. Keep these relative; an absolute posthog.com URL puts the blocking back.
+ */
+export const ANALYTICS_HOST = '/ingest';
+export const ANALYTICS_SCRIPT = '/ingest/static/array.js';
+/** The PostHog app itself, for links the SDK builds. Only data goes through the proxy. */
+export const ANALYTICS_UI_HOST = 'https://us.posthog.com';
 /** Only the live site reports, so local runs and preview deploys stay out of the numbers. */
 export const ANALYTICS_SITE = 'putt.richyarthurs.com';
 

@@ -143,7 +143,17 @@ is empty nothing is loaded or sent.
   `track()` is called with in `src/app.js`.
 - **Where** – only on `putt.richyarthurs.com` (`ANALYTICS_SITE`), so local runs
   and preview deploys stay out of the numbers.
-- **Opting out** – Settings → Usage stats → Don't share.
+- **How it gets there** – through this site, not PostHog's domain. `vercel.json`
+  rewrites `/ingest/static/*` to `us-assets.i.posthog.com` and `/ingest/*` to
+  `us.i.posthog.com`, and `ANALYTICS_HOST` / `ANALYTICS_SCRIPT` are those
+  relative paths. Content blockers match PostHog by hostname, so talking to it
+  directly meant the script was dropped before it ran and *nothing* was ever
+  recorded — not a bug you can see, because a blocked load is silent by design
+  (`src/analytics.js`). Point these back at an absolute posthog.com URL and the
+  blocking comes back.
+- **Opting out** – Settings → Usage stats → Don't share. The proxy routes around
+  blockers, so this toggle is the only way a visitor can say no; keep it where it
+  is and keep it working.
 
 To add an event, call `track('name', { … })` in `src/app.js`; anything that
 decides what goes in it belongs in `src/stats.js` with a test.
