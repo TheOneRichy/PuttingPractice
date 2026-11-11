@@ -143,3 +143,10 @@ input, select, textarea {
 .key { display: inline-block; width: 16px; height: 3px; border-radius: 2px; }
 .key.raw { background: var(--muted); }
 .key.avg { background: var(--brand); margin-left: 8px; }
+
+/* Practice zone gauge: 0–100% track, target band, 95% range and current % */
+.zone-bar { position: relative; height: 14px; margin: 10px 0; border-radius: 7px; background: var(--line); }
+.zone-bar > span { position: absolute; top: 0; height: 100%; }
+.zone-band { background: var(--make); opacity: .35; border-radius: 4px; }
+.zone-range { top: 4px !important; height: 6px !important; background: var(--muted); opacity: .7; border-radius: 3px; }
+.zone-dot { width: 4px; margin-left: -2px; top: -3px !important; height: 20px !important; background: var(--text); border-radius: 2px; }

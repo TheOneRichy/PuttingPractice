@@ -55,3 +55,43 @@ test('currentStreak counts consecutive days ending today or yesterday', () => {
   assert.equal(S.currentStreak(s, '2026-03-11'), 3);
   assert.equal(S.currentStreak(s, '2026-03-12'), 0);
 });
+
+test('atFeet sums putts at one distance only', () => {
+  const t = S.atFeet([
+    session('2026-01-01', [{ ft: 18, attempts: 10, makes: 9 }, { ft: 20, attempts: 10, makes: 5 }]),
+    session('2026-01-02', [{ ft: 18.0001, attempts: 10, makes: 8 }]),
+  ], 18);
+  assert.deepEqual(t, { attempts: 20, makes: 17, pct: 85 });
+});
+
+test('wilson interval brackets the observed % and narrows with more putts', () => {
+  const small = S.wilson(17, 20);
+  const big = S.wilson(170, 200);
+  assert.ok(small.lo < 85 && small.hi > 85);
+  assert.ok(big.lo > small.lo && big.hi < small.hi);
+  assert.ok(Math.abs(big.lo - 79.4) < 0.5 && Math.abs(big.hi - 89.4) < 0.5);
+  assert.deepEqual(S.wilson(0, 0), { lo: 0, hi: 100 });
+  assert.equal(S.wilson(10, 10).hi, 100);
+});
+
+test('zoneVerdict needs enough putts, then calls the zone', () => {
+  assert.equal(S.zoneVerdict({ makes: 9, attempts: 10 }).status, 'need-more');
+  assert.equal(S.zoneVerdict({ makes: 9, attempts: 10 }).needed, 40);
+  assert.equal(S.zoneVerdict({ makes: 43, attempts: 50 }).status, 'in-zone');
+  assert.equal(S.zoneVerdict({ makes: 120, attempts: 200 }).status, 'too-hard');
+  assert.equal(S.zoneVerdict({ makes: 198, attempts: 200 }).status, 'too-easy');
+  assert.equal(S.zoneVerdict({ makes: 38, attempts: 50 }).status, 'leaning-hard');
+  assert.equal(S.zoneVerdict({ makes: 48, attempts: 50 }).status, 'leaning-easy');
+});
+
+test('targetDistance interpolates where make % crosses the target', () => {
+  const s = [session('2026-01-01', [
+    { ft: 15, attempts: 20, makes: 19 }, // 95%
+    { ft: 20, attempts: 20, makes: 15 }, // 75%
+    { ft: 30, attempts: 5, makes: 0 }, // too few putts, ignored
+  ])];
+  assert.deepEqual(S.targetDistance(s), { ft: 17.5, kind: 'between' });
+  assert.deepEqual(S.targetDistance([session('x', [{ ft: 18, attempts: 30, makes: 29 }])]), { ft: 18, kind: 'beyond' });
+  assert.deepEqual(S.targetDistance([session('x', [{ ft: 18, attempts: 30, makes: 10 }])]), { ft: 18, kind: 'inside' });
+  assert.equal(S.targetDistance([]), null);
+});
