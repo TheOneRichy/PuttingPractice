@@ -155,6 +155,12 @@ is empty nothing is loaded or sent.
   recorded — not a bug you can see, because a blocked load is silent by design
   (`src/analytics.js`). Point these back at an absolute posthog.com URL and the
   blocking comes back.
+- **Is it working?** – `src/analytics.js` logs one `[usage-stats]` line to the
+  console saying what it is doing: why it is off, that the script was blocked,
+  that an event was rejected (with the HTTP status), or that it is on and where
+  it is sending. Both times this broke, it broke silently — a blocker ate the
+  script, and later a bad rewrite 404'd every event while the SDK looked healthy.
+  If the line says `on` and no events arrive, check the Network tab for `ingest`.
 - **Opting out** – Settings → Usage stats → Don't share. The proxy routes around
   blockers, so this toggle is the only way a visitor can say no; keep it where it
   is and keep it working.
