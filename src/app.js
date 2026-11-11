@@ -80,7 +80,9 @@ const zoneMark = () => S.nearestStandard(S.fromFt(Number(state.settings.zoneFt) 
 const fmtMark = (d) => `${d} ${unit()}`;
 const zoneSets = () => Math.min(30, Math.max(1, Number(state.settings.zoneSets) || 8));
 const zoneTarget = () => Number(state.settings.zoneTarget) || 85;
-const ZONE_MIN = 50; // putts before the app makes a call
+// Putts before the app makes a call. 48 rather than a round 50 so whole sets land on it:
+// 8 sets of 6, 6 of 8, 12 of 4. The read is no weaker for the two putts.
+const ZONE_MIN = 48;
 const ZONE_BAND = 5; // ± % around the target that counts as "in the zone"
 const zoneOpts = () => ({ target: zoneTarget(), band: ZONE_BAND, minAttempts: ZONE_MIN });
 /** A distance in the unit chosen in Settings: whole feet, or metres to one decimal (no trailing .0). */

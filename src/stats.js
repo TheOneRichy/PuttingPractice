@@ -193,7 +193,7 @@ export function wilson(makes, attempts, z = 1.96) {
  *  in-zone      make % is inside the zone
  *  leaning-hard / leaning-easy  outside the zone, but not conclusively yet
  */
-export function zoneVerdict({ makes, attempts }, { target = 85, band = 5, minAttempts = 50 } = {}) {
+export function zoneVerdict({ makes, attempts }, { target = 85, band = 5, minAttempts = 48 } = {}) {
   const p = pct(makes, attempts);
   const { lo, hi } = wilson(makes, attempts);
   const base = { pct: p, lo, hi, attempts, needed: Math.max(0, minAttempts - attempts) };
