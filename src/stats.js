@@ -205,3 +205,16 @@ export function setStats(sets) {
   const attempts = full.reduce((n, s) => n + s.attempts, 0);
   return { count: full.length, clean, makes, attempts, avgMakes: full.length ? makes / full.length : 0 };
 }
+
+/**
+ * A routine counts each station in putts ({ distance, putts }) or, with
+ * count: 'sets', in sets of your putters ({ distance, sets }). This turns either
+ * into concrete { distance, putts } stations for a session.
+ */
+export function expandStations(routine, putters) {
+  const p = Math.max(1, putters || 1);
+  return routine.stations.map((s) =>
+    routine.count === 'sets'
+      ? { distance: s.distance, putts: (s.sets || 1) * p }
+      : { distance: s.distance, putts: s.putts });
+}

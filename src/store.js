@@ -9,7 +9,8 @@ export const DEFAULT_ROUTINES = [
     name: '18 ft Zone Reps',
     kind: 'stations',
     unit: 'ft',
-    stations: Array.from({ length: 5 }, () => ({ distance: 18, putts: 10 })),
+    count: 'sets', // sets of your putters, so it fits however many you carry
+    stations: [{ distance: 18, sets: 8 }],
   },
   {
     id: 'c1-ladder',
@@ -69,6 +70,14 @@ function upgrade(state) {
     seen.add(id);
   }
   state.settings.seenDefaults = [...seen];
+  // The first 18 ft Zone Reps was 5 x 10 putts, which split awkwardly into sets
+  // of putters. Swap it for the set-based version unless it has been edited.
+  const i = state.routines.findIndex((r) => r.id === 'zone-18');
+  const old = state.routines[i];
+  if (old && !old.count && old.name === '18 ft Zone Reps' && old.unit === 'ft' && old.stations.length === 5
+      && old.stations.every((st) => st.distance === 18 && st.putts === 10)) {
+    state.routines[i] = structuredClone(DEFAULT_ROUTINES.find((r) => r.id === 'zone-18'));
+  }
   return state;
 }
 

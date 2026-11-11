@@ -18,6 +18,13 @@ const todayKey = () => {
 };
 const routineSummary = (r) => {
   if (r.kind === 'jyly') return '20 rounds × 5 putts, 5–10 m';
+  if (r.count === 'sets') {
+    const p = puttersPref();
+    const sets = r.stations.reduce((n, s) => n + s.sets, 0);
+    const where = r.stations.length === 1 ? `at ${r.stations[0].distance} ${r.unit}`
+      : `${r.stations.length} distances (${r.stations.map((s) => s.distance).join(' · ')} ${r.unit})`;
+    return `${sets} set${sets === 1 ? '' : 's'} ${where} · ${sets * p} putts with ${p} putter${p === 1 ? '' : 's'}`;
+  }
   const total = r.stations.reduce((n, s) => n + s.putts, 0);
   const st = r.stations;
   if (st.length > 1 && st.every((s) => s.distance === st[0].distance && s.putts === st[0].putts)) {
@@ -398,8 +405,11 @@ function viewRoutineEdit() {
       <label class="field">Unit <select name="unit">
         <option value="ft" ${r.unit === 'ft' ? 'selected' : ''}>feet</option>
         <option value="m" ${r.unit === 'm' ? 'selected' : ''}>metres</option></select></label>
-      <table class="edit" id="st-rows"><tr><th>Distance</th><th>Putts</th><th></th></tr>
-        ${r.stations.map((s) => stRow(s)).join('')}</table>
+      <label class="field">Count each distance in <select name="count" id="routine-count">
+        <option value="putts" ${r.count !== 'sets' ? 'selected' : ''}>putts</option>
+        <option value="sets" ${r.count === 'sets' ? 'selected' : ''}>sets of my putters</option></select></label>
+      <table class="edit" id="st-rows"><tr><th>Distance</th><th id="st-count-head">${r.count === 'sets' ? 'Sets' : 'Putts'}</th><th></th></tr>
+        ${r.stations.map((s) => stRow({ distance: s.distance, putts: r.count === 'sets' ? s.sets : s.putts })).join('')}</table>
       <button type="button" class="btn ghost" data-action="st-add">+ Add station</button>
       <div class="row"><button class="btn primary" type="submit">Save routine</button>
       <button type="button" class="btn ghost" data-action="cancel-edit">Cancel</button></div>
@@ -452,10 +462,13 @@ window.addEventListener('hashchange', render);
 function startRoutine(id) {
   const r = state.routines.find((x) => x.id === id);
   if (!r) return;
+  const putters = puttersPref();
   state.active = {
     routineId: r.id, routineName: r.name, kind: r.kind, unit: r.unit, startedAt: new Date().toISOString(),
-    stations: structuredClone(r.stations), stationIdx: 0, log: r.stations.map(() => []), rounds: [],
-    putters: puttersPref(), history: [],
+    stations: S.expandStations(r, putters), stationIdx: 0, log: r.stations.map(() => []), rounds: [],
+    putters, history: [],
+    // For set-based routines, keep the set counts so a mid-session putter change can resize stations.
+    stationSets: r.count === 'sets' ? r.stations.map((st) => st.sets) : null,
   };
   persist();
   go('session');
@@ -582,9 +595,19 @@ app.addEventListener('change', (e) => {
     if (n >= min && n <= max) { state.settings[key] = n; persist(); }
     render();
   }
+  if (e.target.id === 'routine-count') {
+    document.getElementById('st-count-head').textContent = e.target.value === 'sets' ? 'Sets' : 'Putts';
+  }
   if (e.target.id === 'putters-pref') { state.settings.putters = clampPutters(e.target.value); persist(); render(); }
   if (e.target.id === 'session-putters' && state.active) {
-    state.active.putters = state.settings.putters = clampPutters(e.target.value); persist(); render();
+    const a = state.active;
+    a.putters = state.settings.putters = clampPutters(e.target.value);
+    if (a.stationSets) {
+      for (let i = a.stationIdx; i < a.stations.length; i++) {
+        a.stations[i].putts = Math.max(a.log[i].length, a.stationSets[i] * a.putters);
+      }
+    }
+    persist(); render();
   }
   if (e.target.id === 'trend-dist') { progressDistance = Number(e.target.value); render(); }
   if (e.target.id === 'import') {
@@ -621,7 +644,13 @@ app.addEventListener('submit', (e) => {
   if (form.id === 'routine-form') {
     editing.name = form.name.value.trim();
     editing.unit = form.unit.value;
-    editing.stations = rows(form).map((r) => ({ distance: r.d, putts: r.p }));
+    if (form.count.value === 'sets') {
+      editing.count = 'sets';
+      editing.stations = rows(form).map((r) => ({ distance: r.d, sets: r.p }));
+    } else {
+      delete editing.count;
+      editing.stations = rows(form).map((r) => ({ distance: r.d, putts: r.p }));
+    }
     const i = state.routines.findIndex((r) => r.id === editing.id);
     if (i >= 0) state.routines[i] = editing; else state.routines.push(editing);
     editing = null; persist(); render();
