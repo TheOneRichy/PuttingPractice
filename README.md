@@ -32,7 +32,8 @@ about 85% of your putts**, and let the numbers tell you when to move.
   too hard, last 30 days once there are 50+ putts) and its trend. Totals,
   whole-session trend, JYLY and Perfect Putt 360 scores follow.
 - **History** – sessions by month with makes per distance, set scores and notes.
-- **Settings** (gear, top right) – feet or metres, target make %, backup, reset.
+- **Settings** (gear, top right) – feet or metres, target make %, backup,
+  feedback (opens the sender's mail app with a message addressed to Richard), reset.
 
 Also in there:
 

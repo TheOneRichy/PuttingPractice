@@ -59,6 +59,7 @@ button { cursor: pointer; touch-action: manipulation; }
 button:disabled { opacity: .4; cursor: default; }
 
 .muted { color: var(--muted); }
+p a { color: var(--brand); font-weight: 600; overflow-wrap: anywhere; }
 .small { font-size: .85rem; }
 .nowrap { white-space: nowrap; }
 .up { color: var(--make); }

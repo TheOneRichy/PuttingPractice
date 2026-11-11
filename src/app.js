@@ -636,6 +636,13 @@ function viewSettings() {
       <label class="btn">Import backup<input type="file" id="import" accept="application/json" hidden></label></div>
     </section>
     <section class="panel">
+      <h3>Feedback</h3>
+      <p class="muted small">Found a bug, or want something added? This goes straight to Richard. Send opens your mail app with the message ready to go.</p>
+      <label class="field">Your message <textarea id="feedback" rows="4" placeholder="What happened, or what would make this better?"></textarea></label>
+      <div class="actions-row"><button class="btn primary" data-action="feedback">Send feedback</button></div>
+      <p class="muted small">Nothing opened? Email <a href="mailto:${S.FEEDBACK_EMAIL}">${S.FEEDBACK_EMAIL}</a>.</p>
+    </section>
+    <section class="panel">
       <h3>Start over</h3>
       <p class="muted small">Deletes every session and routine on this device.</p>
       <button class="btn ghost danger" data-action="wipe">Delete all data</button>
@@ -725,6 +732,12 @@ const actions = {
     const { key, value } = el.dataset;
     state.settings[key] = key === 'unit' ? value : Number(value);
     persist(); render();
+  },
+  feedback: () => {
+    const box = document.getElementById('feedback');
+    if (!box.value.trim()) { toast('Write a message first.'); box.focus(); return; }
+    const details = `${plural(state.sessions.length, 'session')} logged, ${unit() === 'm' ? 'metres' : 'feet'}\n${navigator.userAgent}`;
+    location.href = S.feedbackMailto(box.value, details);
   },
   'pick-distance': (el) => { progressDistance = Number(el.dataset.d); render(); },
   putt: (el) => {

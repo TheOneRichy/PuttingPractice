@@ -320,3 +320,16 @@ export function sessionProgress(stations, log, stationIdx = 0) {
   const done = parts.reduce((n, p) => n + p.putts * p.fraction, 0);
   return { parts, total, fraction: total ? done / total : 0 };
 }
+
+// ---- feedback ----------------------------------------------------------------
+export const FEEDBACK_EMAIL = 'richardvarthurs@gmail.com';
+
+/**
+ * A mailto: link that opens the sender's own mail app with the message filled in.
+ * `details` (device, app state) goes under a divider so a bug report arrives with context.
+ */
+export function feedbackMailto(message, details = '') {
+  const body = [message.trim(), details && `--\n${details}`].filter(Boolean).join('\n\n');
+  // encodeURIComponent, not URLSearchParams: mail apps show "+" literally instead of as a space.
+  return `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent('Putting Practice feedback')}&body=${encodeURIComponent(body)}`;
+}
