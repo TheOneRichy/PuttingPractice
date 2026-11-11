@@ -16,10 +16,42 @@ const todayKey = () => {
   const d = new Date();
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 };
-const routineSummary = (r) =>
-  r.kind === 'jyly'
-    ? '20 rounds × 5 putts, 5–10 m'
-    : r.stations.map((s) => `${s.distance}`).join(' · ') + ` ${r.unit} · ${r.stations.reduce((n, s) => n + s.putts, 0)} putts`;
+const routineSummary = (r) => {
+  if (r.kind === 'jyly') return '20 rounds × 5 putts, 5–10 m';
+  const total = r.stations.reduce((n, s) => n + s.putts, 0);
+  const st = r.stations;
+  if (st.length > 1 && st.every((s) => s.distance === st[0].distance && s.putts === st[0].putts)) {
+    return `${st.length} × ${st[0].putts} putts at ${st[0].distance} ${r.unit} · ${total} putts`;
+  }
+  return st.map((s) => `${s.distance}`).join(' · ') + ` ${r.unit} · ${total} putts`;
+};
+
+// ---- practice zone ---------------------------------------------------------
+const zoneFt = () => Number(state.settings.zoneFt) || 18;
+const zoneTarget = () => Number(state.settings.zoneTarget) || 85;
+const ZONE_MIN = 50; // putts before the app makes a call
+const ZONE_BAND = 5; // ± % around the target that counts as "in the zone"
+const fmtDist = (ft) => (unit() === 'm' ? `${S.fromFt(ft, 'm').toFixed(1)} m` : `${Math.round(ft)} ft`);
+const zoneMessages = {
+  'need-more': (v) => `Not enough putts yet for a reliable number. About <strong>${v.needed}</strong> more and the app will make a call.`,
+  'in-zone': () => 'You are in the zone at this distance. Keep practising here.',
+  'too-hard': () => 'Clearly below the zone. Move a step or two closer.',
+  'too-easy': () => 'Clearly above the zone. Move a step or two back.',
+  'leaning-hard': () => 'Leaning below the zone, but not certain yet. Keep logging putts here.',
+  'leaning-easy': () => 'Leaning above the zone, but not certain yet. Keep logging putts here.',
+};
+const zoneTone = { 'in-zone': 'up', 'too-hard': 'down', 'too-easy': 'down' };
+
+/** Zone verdict at the focus distance, using the last 30 days when there are enough putts. */
+function zoneReport(sessions) {
+  const ft = zoneFt();
+  const opts = { target: zoneTarget(), band: ZONE_BAND, minAttempts: ZONE_MIN };
+  const all = S.atFeet(sessions, ft);
+  const recent = S.atFeet(S.sessionsSince(sessions, new Date(Date.now() - 30 * 864e5).toISOString()), ft);
+  const useRecent = recent.attempts >= ZONE_MIN && recent.attempts < all.attempts;
+  const v = S.zoneVerdict(useRecent ? recent : all, opts);
+  return { ft, all, recent, useRecent, v };
+}
 
 const go = (hash) => {
   if (location.hash === '#' + hash) render();
@@ -106,6 +138,8 @@ function viewSession() {
   const st = a.stations[a.stationIdx];
   const log = a.log[a.stationIdx];
   const makes = log.filter(Boolean).length;
+  const sofar = a.log.flat();
+  const sofarMakes = sofar.filter(Boolean).length;
   return shell('practice', `
     <div class="session">
       <p class="muted">${esc(a.routineName)} · station ${a.stationIdx + 1} of ${a.stations.length}</p>
@@ -113,6 +147,7 @@ function viewSession() {
       <p class="progress-text">Putt ${Math.min(log.length + 1, st.putts)} of ${st.putts} · <strong>${makes}</strong> made</p>
       <div class="pips">${Array.from({ length: st.putts }, (_, i) =>
         `<span class="pip ${i < log.length ? (log[i] ? 'make' : 'miss') : ''}"></span>`).join('')}</div>
+      ${sofar.length ? `<p class="muted small">Session so far: ${sofarMakes}/${sofar.length} · <strong>${fmtPct(S.pct(sofarMakes, sofar.length))}</strong></p>` : ''}
       <div class="bigbtns">
         <button class="big miss" data-action="putt" data-made="0">Miss</button>
         <button class="big make" data-action="putt" data-made="1">Make</button>
@@ -160,6 +195,15 @@ function viewFinish(a) {
           ? `<tr><td>${st.distance} ${a.unit}</td><td>${a.log[i].filter(Boolean).length}/${a.log[i].length}</td><td>${fmtPct(S.pct(a.log[i].filter(Boolean).length, a.log[i].length))}</td></tr>`
           : '')
         .join('')}</table>`;
+  const here = S.atFeet([{ results }], zoneFt());
+  let zoneLine = '';
+  if (here.attempts) {
+    const z = zoneReport([...state.sessions, { date: new Date().toISOString(), results }]);
+    zoneLine = `<div class="card accent"><strong>${fmtDist(z.ft)} zone check</strong>
+      <p class="small">This session: ${here.makes}/${here.attempts} (${fmtPct(here.pct)}). Including it, you are at
+      <strong>${fmtPct(z.v.pct)}</strong> over ${z.v.attempts} putts${z.useRecent ? ' in the last 30 days' : ''}.</p>
+      <p class="small ${zoneTone[z.v.status] || ''}">${zoneMessages[z.v.status](z.v)}</p></div>`;
+  }
   return shell('practice', `
     <h2>Session complete</h2>
     <div class="card">
@@ -167,6 +211,7 @@ function viewFinish(a) {
       <p class="muted center">${tot.makes} of ${tot.attempts} putts made</p>
       ${rows}
     </div>
+    ${zoneLine}
     <label class="field">Notes (wind, form cues, how it felt)
       <textarea id="notes" rows="3" placeholder="e.g. focused on follow-through, light headwind"></textarea></label>
     <div class="row">
@@ -233,9 +278,33 @@ function viewProgress() {
   const overallTrend = S.overallTrend(all.filter((s) => s.kind !== 'jyly')).map((p) => ({ date: p.date, value: p.pct }));
   const jyly = all.filter((s) => s.kind === 'jyly').sort((a, b) => a.date.localeCompare(b.date));
   const best = jyly.length ? Math.max(...jyly.map((s) => s.score)) : null;
+  const z = zoneReport(all);
+  const target = zoneTarget();
+  const est = S.targetDistance(all, { target, minAttempts: 20 });
+  const estLine = !est ? ''
+    : est.kind === 'between' ? `Across all your distances, your ${target}% distance looks like about <strong>${fmtDist(est.ft)}</strong>.`
+    : est.kind === 'beyond' ? `You are at ${target}%+ at every distance you have logged (out to ${fmtDist(est.ft)}). Log some putts further out to find your ${target}% distance.`
+    : `You are under ${target}% at every distance you have logged (in to ${fmtDist(est.ft)}). Log some putts closer in to find your ${target}% distance.`;
+  const zoneCard = `<div class="card accent">
+      <div class="hist-head"><h3>${target}% zone · ${fmtDist(z.ft)}</h3>
+        ${z.v.attempts ? `<span class="pct">${fmtPct(z.v.pct)}</span>` : ''}</div>
+      ${z.all.attempts ? `
+        <p class="small">${z.v.attempts} putts${z.useRecent ? ' in the last 30 days' : ''} ·
+          likely between <strong>${fmtPct(z.v.lo)}</strong> and <strong>${fmtPct(z.v.hi)}</strong> (95% range)</p>
+        <div class="zone-bar" aria-hidden="true">
+          <span class="zone-band" style="left:${target - ZONE_BAND}%;width:${2 * ZONE_BAND}%"></span>
+          <span class="zone-range" style="left:${z.v.lo}%;width:${Math.max(1, z.v.hi - z.v.lo)}%"></span>
+          <span class="zone-dot" style="left:${z.v.pct}%"></span>
+        </div>
+        <p class="small ${zoneTone[z.v.status] || ''}">${zoneMessages[z.v.status](z.v)}</p>
+        ${z.useRecent ? `<p class="muted small">All time: ${z.all.makes}/${z.all.attempts} (${fmtPct(z.all.pct)})</p>` : ''}`
+      : `<p class="small muted">No putts at ${fmtDist(z.ft)} yet. Run <strong>18 ft Zone Reps</strong> to start building the number.</p>`}
+      ${estLine ? `<p class="small">${estLine}</p>` : ''}
+    </div>`;
 
   return shell('progress', `
     <h2>Progress</h2>
+    ${zoneCard}
     <section class="stats-row four">
       <div class="stat"><span class="num">${all.length}</span><span class="lbl">sessions</span></div>
       <div class="stat"><span class="num">${overall.a}</span><span class="lbl">total putts</span></div>
@@ -311,6 +380,12 @@ function viewSettings() {
       <label class="field">Show stats in
         <select id="unit"><option value="ft" ${unit() === 'ft' ? 'selected' : ''}>feet</option>
         <option value="m" ${unit() === 'm' ? 'selected' : ''}>metres</option></select></label>
+    </div>
+    <div class="card">
+      <h3>Practice zone</h3>
+      <p class="muted small">Practise where you make about ${zoneTarget()}% of your putts. Progress tracks your make % at this distance and tells you when to move in or back.</p>
+      <label class="field">Zone distance (ft) <input type="number" id="zone-ft" min="3" max="100" step="1" value="${zoneFt()}" inputmode="numeric"></label>
+      <label class="field">Target make % <input type="number" id="zone-target" min="50" max="99" step="1" value="${zoneTarget()}" inputmode="numeric"></label>
     </div>
     <div class="card">
       <h3>Backup</h3>
@@ -440,6 +515,12 @@ app.addEventListener('click', (e) => {
 
 app.addEventListener('change', (e) => {
   if (e.target.id === 'unit') { state.settings.unit = e.target.value; persist(); render(); }
+  if (e.target.id === 'zone-ft' || e.target.id === 'zone-target') {
+    const n = Math.round(Number(e.target.value));
+    const [key, min, max] = e.target.id === 'zone-ft' ? ['zoneFt', 3, 100] : ['zoneTarget', 50, 99];
+    if (n >= min && n <= max) { state.settings[key] = n; persist(); }
+    render();
+  }
   if (e.target.id === 'trend-dist') { progressDistance = Number(e.target.value); render(); }
   if (e.target.id === 'import') {
     const file = e.target.files[0];

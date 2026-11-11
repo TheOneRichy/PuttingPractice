@@ -10,7 +10,7 @@ No accounts, no server, no build step. Data stays in your browser
 ## Features
 
 - **Routines** – station-based drills (distance × putts). Comes with
-  Circle 1 Ladder, C1X Grind and Circle 2 Reps; create and edit your own in
+  18 ft Zone Reps (5 × 10 at 18 ft), Circle 1 Ladder, C1X Grind and Circle 2 Reps; create and edit your own in
   feet or metres.
 - **JYLY** – the classic 20-round, 5-disc game (5–10 m, max 1000 points),
   with automatic distance changes and scoring.
@@ -19,6 +19,12 @@ No accounts, no server, no build step. Data stays in your browser
   reload.
 - **Quick log** – enter a session after the fact (distance / putts / made).
 - **History** – every session with per-distance breakdown and notes.
+- **Practice zone** – practise where you make about 85% of putts. Progress
+  shows your make % at the zone distance (18 ft by default) with a 95% range,
+  says when you have enough putts for a reliable read (50+), and tells you
+  whether to move in, move back or stay. It also estimates your 85% distance
+  from every distance you have logged. Distance and target % are set in
+  Settings; the session screen shows a running make % as you putt.
 - **Progress** – total putts, overall make %, putts this week, day streak,
   make % by distance (all-time vs. last 30 days), trend charts per distance
   with a 5-session rolling average, and JYLY score history.
