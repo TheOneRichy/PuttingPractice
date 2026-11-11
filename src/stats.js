@@ -188,3 +188,20 @@ export function targetDistance(sessions, { target = 85, minAttempts = 20 } = {})
   const best = [...rows].sort((x, y) => Math.abs(x.pct - target) - Math.abs(y.pct - target))[0];
   return { ft: best.distance, kind: 'between' };
 }
+
+// ---- Sets (putting with several discs) -------------------------------------
+// With N putters you throw N putts, walk to the basket and count. A "set" is
+// one of those throw-ins: { ft, attempts, makes }.
+export const MAX_PUTTERS = 12;
+
+/** Discs in the next set: all your putters, or fewer if the station is nearly done. */
+export const nextSetSize = (putters, puttsLeft) => Math.max(0, Math.min(putters, puttsLeft));
+
+/** Summary of a list of sets: how many, how many were clean (all made), make counts. */
+export function setStats(sets) {
+  const full = sets.filter((s) => s.attempts > 0);
+  const clean = full.filter((s) => s.makes === s.attempts).length;
+  const makes = full.reduce((n, s) => n + s.makes, 0);
+  const attempts = full.reduce((n, s) => n + s.attempts, 0);
+  return { count: full.length, clean, makes, attempts, avgMakes: full.length ? makes / full.length : 0 };
+}

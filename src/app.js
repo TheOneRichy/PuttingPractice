@@ -26,6 +26,21 @@ const routineSummary = (r) => {
   return st.map((s) => `${s.distance}`).join(' · ') + ` ${r.unit} · ${total} putts`;
 };
 
+// ---- putters / sets ---------------------------------------------------------
+const clampPutters = (n) => Math.min(S.MAX_PUTTERS, Math.max(1, Math.round(Number(n)) || 1));
+const puttersPref = () => clampPutters(state.settings.putters);
+const puttersSelect = (id, value) => `<select id="${id}" aria-label="Putters per set">${
+  Array.from({ length: S.MAX_PUTTERS }, (_, i) => i + 1)
+    .map((n) => `<option value="${n}" ${n === value ? 'selected' : ''}>${n === 1 ? '1 (tap each putt)' : n}</option>`)
+    .join('')}</select>`;
+/** "6 · 4 · 5" plus clean-set count, for finish screen and history. */
+function setsLine(sets) {
+  if (!sets?.length) return '';
+  const st = S.setStats(sets);
+  return `Sets: ${sets.map((x) => (x.makes === x.attempts ? `<strong>${x.makes}</strong>` : x.makes)).join(' · ')}
+    <span class="muted">· ${st.clean} of ${st.count} clean · avg ${st.avgMakes.toFixed(1)} made</span>`;
+}
+
 // ---- practice zone ---------------------------------------------------------
 const zoneFt = () => Number(state.settings.zoneFt) || 18;
 const zoneTarget = () => Number(state.settings.zoneTarget) || 85;
@@ -123,6 +138,8 @@ function viewPractice() {
       <div class="stat"><span class="num">${todayTot.a ? fmtPct(S.pct(todayTot.m, todayTot.a)) : '–'}</span><span class="lbl">today</span></div>
     </section>
     <h2>Start a routine</h2>
+    <label class="field inline">Putters per set ${puttersSelect('putters-pref', puttersPref())}</label>
+    <p class="muted small">Throw them all, walk up, then tap how many went in.</p>
     <ul class="list">${state.routines
       .map((r) => `<li><button class="routine" data-action="start" data-id="${r.id}" ${state.active ? 'disabled' : ''}>
         <strong>${esc(r.name)}</strong><span class="muted small">${esc(routineSummary(r))}</span></button></li>`)
@@ -140,20 +157,32 @@ function viewSession() {
   const makes = log.filter(Boolean).length;
   const sofar = a.log.flat();
   const sofarMakes = sofar.filter(Boolean).length;
+  const putters = clampPutters(a.putters);
+  const size = S.nextSetSize(putters, st.putts - log.length);
+  const pip = (i) => `<span class="pip ${i < log.length ? (log[i] ? 'make' : 'miss') : ''}"></span>`;
+  const pips = putters > 1
+    ? Array.from({ length: Math.ceil(st.putts / putters) }, (_, g) =>
+        `<span class="pip-set">${Array.from({ length: Math.min(putters, st.putts - g * putters) }, (_, k) => pip(g * putters + k)).join('')}</span>`).join('')
+    : Array.from({ length: st.putts }, (_, i) => pip(i)).join('');
+  const entry = putters > 1
+    ? `<p class="progress-text">Set ${Math.floor(log.length / putters) + 1} of ${Math.ceil(st.putts / putters)} · how many of <strong>${size}</strong> went in?</p>
+      <div class="makes-grid ${size + 1 > 6 ? 'four' : ''}">${Array.from({ length: size + 1 }, (_, n) =>
+        `<button class="big ${n === size ? 'make' : n === 0 ? 'miss' : ''}" data-action="set" data-makes="${n}">${n}</button>`).join('')}</div>`
+    : `<div class="bigbtns">
+        <button class="big miss" data-action="putt" data-made="0">Miss</button>
+        <button class="big make" data-action="putt" data-made="1">Make</button>
+      </div>`;
   return shell('practice', `
     <div class="session">
       <p class="muted">${esc(a.routineName)} · station ${a.stationIdx + 1} of ${a.stations.length}</p>
       <div class="distance">${st.distance}<small> ${a.unit}</small></div>
       <p class="progress-text">Putt ${Math.min(log.length + 1, st.putts)} of ${st.putts} · <strong>${makes}</strong> made</p>
-      <div class="pips">${Array.from({ length: st.putts }, (_, i) =>
-        `<span class="pip ${i < log.length ? (log[i] ? 'make' : 'miss') : ''}"></span>`).join('')}</div>
+      <div class="pips">${pips}</div>
       ${sofar.length ? `<p class="muted small">Session so far: ${sofarMakes}/${sofar.length} · <strong>${fmtPct(S.pct(sofarMakes, sofar.length))}</strong></p>` : ''}
-      <div class="bigbtns">
-        <button class="big miss" data-action="putt" data-made="0">Miss</button>
-        <button class="big make" data-action="putt" data-made="1">Make</button>
-      </div>
+      ${entry}
+      <label class="field inline small">Putters ${puttersSelect('session-putters', putters)}</label>
       <div class="row">
-        <button class="btn ghost" data-action="undo" ${a.stationIdx === 0 && !log.length ? 'disabled' : ''}>Undo</button>
+        <button class="btn ghost" data-action="undo" ${sofar.length ? '' : 'disabled'}>Undo</button>
         <button class="btn ghost" data-action="skip">Skip station</button>
         <button class="btn ghost" data-action="finish-early">Finish now</button>
       </div>
@@ -185,6 +214,12 @@ function buildResults(a) {
     .filter((r) => r.attempts);
 }
 
+/** Sets entered as "how many of N went in" during a station session. */
+function buildSets(a) {
+  return (a.history || []).filter((h) => h.set)
+    .map((h) => ({ ft: S.toFt(a.stations[h.station].distance, a.unit), attempts: h.n, makes: h.makes }));
+}
+
 function viewFinish(a) {
   const results = buildResults(a);
   const tot = S.sessionTotals({ results });
@@ -210,6 +245,7 @@ function viewFinish(a) {
       <p class="big-pct">${fmtPct(tot.pct)}</p>
       <p class="muted center">${tot.makes} of ${tot.attempts} putts made</p>
       ${rows}
+      ${a.kind === 'jyly' ? '' : (() => { const sets = buildSets(a); return sets.length ? `<p class="small">${setsLine(sets)}</p>` : ''; })()}
     </div>
     ${zoneLine}
     <label class="field">Notes (wind, form cues, how it felt)
@@ -252,6 +288,7 @@ function viewHistory() {
         <div class="hist-head"><strong>${esc(s.routineName)}</strong><span class="pct">${s.kind === 'jyly' ? `${s.score} pts` : fmtPct(t.pct)}</span></div>
         <p class="muted small">${fmtDate(s.date)} · ${t.makes}/${t.attempts} made${s.kind === 'jyly' ? ` · ${fmtPct(t.pct)}` : ''}</p>
         <p class="small">${esc(detail)}</p>
+        ${s.sets?.length ? `<p class="small">${setsLine(s.sets)}</p>` : ''}
         ${s.notes ? `<p class="note small">${esc(s.notes)}</p>` : ''}
         <button class="link danger small" data-action="del-session" data-id="${s.id}">Delete</button>
       </li>`;
@@ -418,6 +455,7 @@ function startRoutine(id) {
   state.active = {
     routineId: r.id, routineName: r.name, kind: r.kind, unit: r.unit, startedAt: new Date().toISOString(),
     stations: structuredClone(r.stations), stationIdx: 0, log: r.stations.map(() => []), rounds: [],
+    putters: puttersPref(), history: [],
   };
   persist();
   go('session');
@@ -431,6 +469,10 @@ function saveActive() {
     notes: (document.getElementById('notes')?.value || '').trim(),
   };
   if (a.kind === 'jyly') session.score = S.jylyScore(a.rounds);
+  else {
+    const sets = buildSets(a);
+    if (sets.length) { session.putters = clampPutters(a.putters); session.sets = sets; }
+  }
   state.sessions.push(session);
   state.active = null;
   persist();
@@ -442,9 +484,23 @@ const actions = {
   putt: (el) => {
     const a = state.active;
     const log = a.log[a.stationIdx];
-    log.push(el.dataset.made === '1');
-    if (navigator.vibrate) navigator.vibrate(el.dataset.made === '1' ? 30 : [15, 40, 15]);
+    const made = el.dataset.made === '1';
+    log.push(made);
+    (a.history ||= []).push({ station: a.stationIdx, n: 1, makes: made ? 1 : 0 });
+    if (navigator.vibrate) navigator.vibrate(made ? 30 : [15, 40, 15]);
     if (log.length >= a.stations[a.stationIdx].putts) a.stationIdx++;
+    persist(); render();
+  },
+  set: (el) => {
+    const a = state.active;
+    const st = a.stations[a.stationIdx];
+    const log = a.log[a.stationIdx];
+    const n = S.nextSetSize(clampPutters(a.putters), st.putts - log.length);
+    const makes = Math.min(n, Number(el.dataset.makes));
+    for (let i = 0; i < n; i++) log.push(i < makes);
+    (a.history ||= []).push({ station: a.stationIdx, n, makes, set: true });
+    if (navigator.vibrate) navigator.vibrate(makes === n ? [30, 40, 30] : 30);
+    if (log.length >= st.putts) a.stationIdx++;
     persist(); render();
   },
   jyly: (el) => {
@@ -456,7 +512,12 @@ const actions = {
     const a = state.active;
     if (a.finishedEarly) a.finishedEarly = false;
     else if (a.kind === 'jyly') a.rounds.pop();
-    else {
+    else if (a.history?.length) {
+      // Undo the last entry: one putt, or a whole set.
+      const h = a.history.pop();
+      a.stationIdx = h.station;
+      a.log[h.station].splice(-h.n);
+    } else {
       if (a.stationIdx >= a.stations.length) a.stationIdx = a.stations.length - 1;
       if (!a.log[a.stationIdx].length && a.stationIdx > 0) a.stationIdx--;
       a.log[a.stationIdx].pop();
@@ -520,6 +581,10 @@ app.addEventListener('change', (e) => {
     const [key, min, max] = e.target.id === 'zone-ft' ? ['zoneFt', 3, 100] : ['zoneTarget', 50, 99];
     if (n >= min && n <= max) { state.settings[key] = n; persist(); }
     render();
+  }
+  if (e.target.id === 'putters-pref') { state.settings.putters = clampPutters(e.target.value); persist(); render(); }
+  if (e.target.id === 'session-putters' && state.active) {
+    state.active.putters = state.settings.putters = clampPutters(e.target.value); persist(); render();
   }
   if (e.target.id === 'trend-dist') { progressDistance = Number(e.target.value); render(); }
   if (e.target.id === 'import') {

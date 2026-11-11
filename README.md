@@ -14,6 +14,11 @@ No accounts, no server, no build step. Data stays in your browser
   feet or metres.
 - **JYLY** – the classic 20-round, 5-disc game (5–10 m, max 1000 points),
   with automatic distance changes and scoring.
+- **Putters per set** – pick how many discs you putt with (Practice screen,
+  or mid-session). With more than one, throw them all, walk up and tap how
+  many went in; Undo takes back the whole set. Set scores and clean sets
+  (all in) show on the finish screen and in History. Choose 1 to tap each
+  putt as Make / Miss.
 - **Live session screen** – Make / Miss buttons, progress pips, undo, skip a
   station, finish early, add notes. An in-progress session survives a page
   reload.

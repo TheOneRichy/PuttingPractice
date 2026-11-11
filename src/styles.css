@@ -150,3 +150,11 @@ input, select, textarea {
 .zone-band { background: var(--make); opacity: .35; border-radius: 4px; }
 .zone-range { top: 4px !important; height: 6px !important; background: var(--muted); opacity: .7; border-radius: 3px; }
 .zone-dot { width: 4px; margin-left: -2px; top: -3px !important; height: 20px !important; background: var(--text); border-radius: 2px; }
+
+/* Sets: pips grouped per throw-in, and a wider grid for 7+ make-count buttons */
+.pips:has(.pip-set) { gap: 14px; }
+.pip-set { display: flex; gap: 4px; }
+.makes-grid.four { grid-template-columns: repeat(4, 1fr); }
+.makes-grid.four .big { min-height: 72px; }
+.field.inline { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; }
+.field.inline select { width: auto; }
