@@ -84,6 +84,7 @@ const zoneTarget = () => Number(state.settings.zoneTarget) || 85;
 // 8 sets of 6, 6 of 8, 12 of 4. The read is no weaker for the two putts.
 const ZONE_MIN = 48;
 const ZONE_BAND = 5; // ± % around the target that counts as "in the zone"
+const zoneRange = () => `${zoneTarget() - ZONE_BAND}–${zoneTarget() + ZONE_BAND}%`;
 const zoneOpts = () => ({ target: zoneTarget(), band: ZONE_BAND, minAttempts: ZONE_MIN });
 /** A distance in the unit chosen in Settings: whole feet, or metres to one decimal (no trailing .0). */
 const distNum = (ft) => (unit() === 'm' ? String(Number(S.fromFt(ft, 'm').toFixed(1))) : String(Math.round(ft)));
@@ -97,14 +98,14 @@ const sessionName = (x) => {
 const zoneMessages = {
   'need-more': (v) => `${plural(v.needed, 'more putt')} here and you get a reliable read.`,
   'in-zone': () => 'In the zone. This is the distance to practise.',
-  'too-hard': () => 'Clearly below the zone at this distance.',
-  'too-easy': () => 'Clearly above the zone at this distance.',
-  'leaning-hard': () => 'Leaning below the zone, not certain yet. Keep putting here.',
-  'leaning-easy': () => 'Leaning above the zone, not certain yet. Keep putting here.',
+  'too-hard': () => `Under your ${zoneRange()} zone here for now. One to build up to.`,
+  'too-easy': () => `You have this one: clearly above your ${zoneRange()} zone.`,
+  'leaning-hard': () => 'Just under the zone, not certain yet. Keep putting here.',
+  'leaning-easy': () => 'Just over the zone, not certain yet. Keep putting here.',
 };
 const zoneShort = {
-  'need-more': (v) => `${v.needed} to go`, 'in-zone': () => 'In the zone', 'too-hard': () => 'Too hard',
-  'too-easy': () => 'Too easy', 'leaning-hard': () => 'Leaning hard', 'leaning-easy': () => 'Leaning easy',
+  'need-more': (v) => `${v.needed} to go`, 'in-zone': () => 'In the zone', 'too-hard': () => 'Needs work',
+  'too-easy': () => 'Move back', 'leaning-hard': () => 'Just under', 'leaning-easy': () => 'Just over',
 };
 const pill = (v) => `<span class="pill ${v.status}">${zoneShort[v.status](v)}</span>`;
 
