@@ -131,7 +131,11 @@ is empty nothing is loaded or sent.
 
 - **Who is counted** – each browser gets a random ID kept in localStorage (no
   cookies, no login), which is what makes unique-visitor and returning-visitor
-  numbers work. PostHog also derives country, device and browser.
+  numbers work. PostHog also derives country, device and browser. `person_profiles`
+  is `always`: with no login to identify anyone, profiles would otherwise never be
+  created and cohorts and retention would come back empty. It means those derived
+  properties persist against the random ID rather than only riding along on each
+  event — still nothing that names a person.
 - **What is sent** – a `$pageview` per screen (property `screen`), and
   `session_started`, `session_saved`, `session_discarded`, `feedback_sent`,
   `backup_exported`, `backup_imported`, `data_wiped`. Sessions carry `mode`

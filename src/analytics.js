@@ -26,7 +26,7 @@ export function startAnalytics(settings) {
       api_host: S.ANALYTICS_HOST,
       ui_host: S.ANALYTICS_UI_HOST, // api_host is our own domain, so name the real one for links
       persistence: 'localStorage', // a random ID next to the app's own data; no cookies
-      person_profiles: 'identified_only',
+      person_profiles: 'always', // no login here, so without this there are no profiles and cohorts stay empty
       autocapture: false, // only the events named in app.js, so typed text can never be picked up
       capture_pageview: false, // screens are #hash routes; app.js reports them
       disable_session_recording: true,
