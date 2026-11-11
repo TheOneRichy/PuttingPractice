@@ -45,6 +45,7 @@ const icons = {
   progress: '<path d="M4 19V5M4 19h16M8 15l4-5 3 3 4-6"/>',
   history: '<path d="M5 6h14M5 12h14M5 18h9"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>',
+  feedback: '<path d="M4 5h16v11H10l-4 4v-4H4z"/><path d="M8 9h8M8 12h5"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   undo: '<path d="M9 7L4 12l5 5M4 12h10a6 6 0 010 12h-2" transform="translate(0 -3)"/>',
   chevron: '<path d="M9 6l6 6-6 6"/>',
@@ -170,6 +171,7 @@ const tabs = [['practice', 'Practice'], ['progress', 'Progress'], ['history', 'H
 function shell(active, title, body) {
   return `
   <header class="top"><h1>${title}</h1>
+    <a class="icon-btn" href="#feedback" aria-label="Send feedback">${icon('feedback')}</a>
     <a class="icon-btn" href="#settings" aria-label="Settings">${icon('gear')}</a></header>
   <main>${body}</main>
   <nav class="tabs" aria-label="Sections">${tabs
@@ -614,6 +616,21 @@ const stRow = (s = { distance: '', putts: 2 }, u = 'ft') => `<tr>
   <td><input type="number" name="p" min="1" max="100" step="1" value="${s.putts}" required inputmode="numeric" aria-label="Count"></td>
   <td><button type="button" class="x" data-action="row-del" aria-label="Remove">×</button></td></tr>`;
 
+// ---- feedback -----------------------------------------------------------------
+/** The feedback form: a panel in Settings, and a screen of its own from the speech-bubble icon. */
+function feedbackPanel() {
+  return `
+    <section class="panel">
+      <h3>Feedback</h3>
+      <p class="muted small">Found a bug, or want something added? This goes straight to Richy${S.FEEDBACK_KEY ? '' : '. Send opens your mail app with the message ready to go'}.</p>
+      <label class="field">Your message <textarea id="feedback" rows="4" placeholder="What happened, or what would make this better?"></textarea></label>
+      ${S.FEEDBACK_KEY ? '<label class="field">Your name <input id="feedback-name" autocomplete="name" placeholder="Optional, so Richy knows who to thank"></label>' : ''}
+      <div class="actions-row"><button class="btn primary" data-action="feedback">Send feedback</button></div>
+      <p class="muted small" id="feedback-fallback" ${S.FEEDBACK_KEY ? 'hidden' : ''}>${S.FEEDBACK_KEY ? 'That did not send. Check your connection and try again, or' : 'Nothing opened?'} <a id="feedback-mail" href="mailto:${S.FEEDBACK_EMAIL}">${S.FEEDBACK_KEY ? 'send it from your mail app' : S.FEEDBACK_EMAIL}</a>.</p>
+    </section>`;
+}
+const viewFeedback = () => subpage('Feedback', feedbackPanel());
+
 // ---- settings -----------------------------------------------------------------
 function viewSettings() {
   const seg = (id, value, options) => `<div class="seg" role="group">${options
@@ -635,14 +652,7 @@ function viewSettings() {
       <div class="actions-row"><button class="btn" data-action="export">Export backup</button>
       <label class="btn">Import backup<input type="file" id="import" accept="application/json" hidden></label></div>
     </section>
-    <section class="panel">
-      <h3>Feedback</h3>
-      <p class="muted small">Found a bug, or want something added? This goes straight to Richard${S.FEEDBACK_KEY ? '' : '. Send opens your mail app with the message ready to go'}.</p>
-      <label class="field">Your message <textarea id="feedback" rows="4" placeholder="What happened, or what would make this better?"></textarea></label>
-      ${S.FEEDBACK_KEY ? '<label class="field">Your name <input id="feedback-name" autocomplete="name" placeholder="Optional, so Richard knows who to thank"></label>' : ''}
-      <div class="actions-row"><button class="btn primary" data-action="feedback">Send feedback</button></div>
-      <p class="muted small" id="feedback-fallback" ${S.FEEDBACK_KEY ? 'hidden' : ''}>${S.FEEDBACK_KEY ? 'That did not send. Check your connection and try again, or' : 'Nothing opened?'} <a id="feedback-mail" href="mailto:${S.FEEDBACK_EMAIL}">${S.FEEDBACK_KEY ? 'send it from your mail app' : S.FEEDBACK_EMAIL}</a>.</p>
-    </section>
+    ${feedbackPanel()}
     <section class="panel">
       <h3>Start over</h3>
       <p class="muted small">Deletes every session and routine on this device.</p>
@@ -655,7 +665,7 @@ function render() {
   const route = location.hash.slice(1) || 'practice';
   const views = {
     practice: viewPractice, session: viewSession, quicklog: viewQuickLog, history: viewHistory,
-    progress: viewProgress, routines: viewRoutines, settings: viewSettings,
+    progress: viewProgress, routines: viewRoutines, settings: viewSettings, feedback: viewFeedback,
   };
   app.innerHTML = (views[route] || viewPractice)();
 }

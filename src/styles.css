@@ -74,6 +74,7 @@ p a { color: var(--brand); font-weight: 600; overflow-wrap: anywhere; }
   width: 100%; max-width: 640px; margin: 0 auto;
   padding: calc(10px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 6px max(16px, env(safe-area-inset-left));
 }
+.top:not(.sub) h1 { margin-right: auto; }
 .top.sub { justify-content: flex-start; padding-left: max(6px, env(safe-area-inset-left)); }
 .icon-btn {
   width: var(--tap); height: var(--tap); display: grid; place-items: center; flex: none;

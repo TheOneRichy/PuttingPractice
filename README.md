@@ -34,6 +34,8 @@ about 85% of your putts**, and let the numbers tell you when to move.
 - **History** – sessions by month with makes per distance, set scores and notes.
 - **Settings** (gear, top right) – feet or metres, target make %, backup,
   feedback, reset.
+- **Feedback** (speech bubble, top right) – the same form as in Settings, one
+  tap from any main screen.
 
 Also in there:
 
