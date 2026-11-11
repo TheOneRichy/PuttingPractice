@@ -35,7 +35,7 @@ export const DEFAULT_ROUTINES = [
   { id: 'jyly', name: 'JYLY (20 rounds)', kind: 'jyly', unit: 'm', stations: [] },
 ];
 
-export const DEFAULT_SETTINGS = { unit: 'ft', zoneFt: 18, zoneTarget: 85 };
+export const DEFAULT_SETTINGS = { unit: 'ft', zoneFt: 18, zoneTarget: 85, putters: 6 };
 
 // Default routines added after launch, so existing users get them once too.
 // (Listed ids are only ever added once; deleting one keeps it deleted.)

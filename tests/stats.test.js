@@ -95,3 +95,20 @@ test('targetDistance interpolates where make % crosses the target', () => {
   assert.deepEqual(S.targetDistance([session('x', [{ ft: 18, attempts: 30, makes: 10 }])]), { ft: 18, kind: 'inside' });
   assert.equal(S.targetDistance([]), null);
 });
+
+test('nextSetSize uses all putters until the station runs short', () => {
+  assert.equal(S.nextSetSize(6, 10), 6);
+  assert.equal(S.nextSetSize(6, 4), 4);
+  assert.equal(S.nextSetSize(6, 0), 0);
+  assert.equal(S.nextSetSize(1, 10), 1);
+});
+
+test('setStats counts sets, clean sets and average makes', () => {
+  const st = S.setStats([
+    { ft: 18, attempts: 6, makes: 6 },
+    { ft: 18, attempts: 6, makes: 4 },
+    { ft: 18, attempts: 4, makes: 4 },
+  ]);
+  assert.deepEqual(st, { count: 3, clean: 2, makes: 14, attempts: 16, avgMakes: 14 / 3 });
+  assert.equal(S.setStats([]).avgMakes, 0);
+});
