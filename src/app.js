@@ -26,11 +26,19 @@ const totals = (sessions) => sessions.reduce((a, s) => {
 
 const routineSummary = (r) => {
   if (r.kind === 'jyly') return '20 rounds of 5 putts · 5–10 m';
+  if (r.kind === 'pp360') return `2 rounds of 10 putts from ${pp360Dists().join(' · ')} ${unit()}`;
   const st = S.routineIn(r, unit()).stations;
   const dists = `${[...new Set(st.map((s) => s.distance))].join(' · ')} ${unit()}`;
   const putts = S.expandStations(r, puttersPref()).reduce((n, s) => n + s.putts, 0);
   return `${dists} · ${plural(putts, 'putt')}`;
 };
+
+/** Fixed-format games: not editable, scored in points rather than make %. */
+const GAMES = { jyly: { name: 'JYLY', max: 1000 }, pp360: { name: 'Perfect Putt 360', max: S.PP360_MAX } };
+const isGame = (x) => x.kind in GAMES;
+const gameScore = (a) => (a.kind === 'jyly' ? S.jylyScore(a.rounds) : S.pp360Score(a.rounds));
+/** The five Perfect Putt 360 marks in the display unit (3 / 4.5 / 6 / 7.5 / 9 in metres). */
+const pp360Dists = () => (unit() === 'm' ? S.PP360_M : S.PP360_FT);
 
 const icons = {
   practice: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>',
@@ -261,6 +269,7 @@ function viewSession() {
   const a = state.active;
   if (!a) return viewPractice();
   if (a.kind === 'jyly') return viewJyly(a);
+  if (a.kind === 'pp360') return viewPp360(a);
   if (a.finishedEarly || a.stationIdx >= a.stations.length) return viewFinish(a);
   const st = a.stations[a.stationIdx];
   const log = a.log[a.stationIdx];
@@ -320,8 +329,49 @@ function viewJyly(a) {
   });
 }
 
+function viewPp360(a) {
+  if (a.finishedEarly || a.rounds.length >= S.PP360_STATIONS) return viewFinish(a);
+  const i = a.rounds.length;
+  const n = S.PP360_FT.length;
+  const d = i % n;
+  const P = S.PP360_POINTS;
+  const first = !!a.pending?.first;
+  const last = !!a.pending?.last;
+  const range = S.pp360MakesRange(first, last);
+  canUndo = i > 0;
+  const toggle = (key, on, label, pts) => `<button class="key toggle ${on ? 'on' : ''}" data-action="pp360-toggle" data-key="${key}" aria-pressed="${on}">
+    ${label}<small>+${pts}</small></button>`;
+  return focusShell({
+    title: 'Perfect Putt 360',
+    segments: Array.from({ length: S.PP360_STATIONS }, (_, k) => ({ weight: 1, fraction: k < i ? 1 : 0 })),
+    top: `
+      <p class="eyebrow">Round ${Math.floor(i / n) + 1} of ${S.PP360_ROUNDS} · Station ${d + 1} of ${n}</p>
+      <p class="distance">${pp360Dists()[d]}<small>${unit()}</small></p>
+      <div class="tally pp360">${Array.from({ length: S.PP360_STATIONS }, (_, k) => slot(a.rounds[k]?.makes, S.PP360_PUTTS, k === i)).join('')}</div>
+      <p class="running">Score <strong>${S.pp360Score(a.rounds)}</strong> <span class="muted">· ${P.make[d]} per make · all ten +${P.all[d]}</span></p>`,
+    pad: `
+      <p class="pad-q">Putt <strong>${S.PP360_PUTTS}</strong>. Mark the first and last, then tap how many went in.</p>
+      <div class="two even">${toggle('first', first, 'First in', P.first[d])}${toggle('last', last, 'Last in', P.last[d])}</div>
+      <div class="count-grid five">${Array.from({ length: S.PP360_PUTTS }, (_, m) =>
+        `<button class="key ${m === 0 ? 'zero' : ''}" data-action="pp360" data-makes="${m}" ${m === 0 || (m >= range.min && m <= range.max) ? '' : 'disabled'}>${m}</button>`).join('')}</div>
+      <button class="key all" data-action="pp360" data-makes="${S.PP360_PUTTS}">All ${S.PP360_PUTTS}</button>`,
+    foot: '<button class="btn ghost small" data-action="finish-early">Finish</button>',
+  });
+}
+
+/** Scorecard for the finish screen and history: one row per station played. */
+function pp360Card(stations) {
+  const n = S.PP360_FT.length;
+  const mark = (on) => (on ? '<b class="yes">✓</b>' : '<span class="muted">–</span>');
+  const body = stations.map((st, i) => `${i % n === 0 ? `<tr class="round"><th colspan="6">Round ${i / n + 1}</th></tr>` : ''}
+    <tr><td>${pp360Dists()[i % n]} ${unit()}</td><td>${st.makes}</td><td>${mark(st.first)}</td><td>${mark(st.last)}</td>
+      <td>${mark(st.makes >= S.PP360_PUTTS)}</td><td><b>${S.pp360StationScore(i, st)}</b></td></tr>`).join('');
+  return `<table class="card"><tr><th>Distance</th><th>Made</th><th>First</th><th>Last</th><th>All</th><th>Score</th></tr>${body}</table>`;
+}
+
 function buildResults(a) {
   if (a.kind === 'jyly') return S.jylyToResults(a.rounds);
+  if (a.kind === 'pp360') return S.pp360ToResults(a.rounds);
   return a.stations
     .map((st, i) => ({ ft: S.toFt(st.distance, a.unit), attempts: a.log[i].length, makes: a.log[i].filter(Boolean).length }))
     .filter((r) => r.attempts);
@@ -342,8 +392,11 @@ function viewFinish(a) {
   const tot = S.sessionTotals({ results });
   const rows = a.kind === 'jyly'
     ? S.byDistance([{ results }], 'm').map((d) => barRow(`${d.distance} m`, d.makes, d.attempts))
+    : a.kind === 'pp360'
+      ? S.PP360_FT.map((ft, d) => ({ label: `${pp360Dists()[d]} ${unit()}`, ...S.atFeet([{ results }], ft) }))
+        .filter((x) => x.attempts).map((x) => barRow(x.label, x.makes, x.attempts))
     : a.stations.map((st, i) => (a.log[i].length ? barRow(fmtDist(S.toFt(st.distance, a.unit)), a.log[i].filter(Boolean).length, a.log[i].length) : ''));
-  const sets = a.kind === 'jyly' ? [] : buildSets(a);
+  const sets = isGame(a) ? [] : buildSets(a);
   // Zone check at the zone distance if putted, else the standard distance with the most putts.
   const putted = S.standardDistances(unit()).map((d) => ({ d, ...S.atDistance([{ results }], unit(), d) })).filter((x) => x.attempts);
   const check = putted.find((x) => x.d === zoneMark()) || putted.sort((x, y) => y.attempts - x.attempts)[0];
@@ -358,9 +411,10 @@ function viewFinish(a) {
   }
   return subpage('Session complete', `
     <section class="result">
-      <p class="result-pct">${a.kind === 'jyly' ? S.jylyScore(a.rounds) : fmtPct(tot.pct)}</p>
-      <p class="muted">${a.kind === 'jyly' ? `JYLY score of 1000 · ${fmtPct(tot.pct)} made` : `${tot.makes} of ${plural(tot.attempts, 'putt')} made`}</p>
+      <p class="result-pct">${isGame(a) ? gameScore(a) : fmtPct(tot.pct)}</p>
+      <p class="muted">${isGame(a) ? `${GAMES[a.kind].name} score of ${GAMES[a.kind].max} · ${fmtPct(tot.pct)} made` : `${tot.makes} of ${plural(tot.attempts, 'putt')} made`}</p>
     </section>
+    ${a.kind === 'pp360' && a.rounds.length ? `<section class="panel">${pp360Card(a.rounds)}</section>` : ''}
     <section class="panel">
       <ul class="list bars">${rows.join('')}</ul>
       ${sets.length ? `<p class="small sets-line">${setsLine(sets)}</p>` : ''}
@@ -416,9 +470,10 @@ function viewHistory() {
       return `<li class="hist">
         <div class="hist-head"><span><strong>${esc(sessionName(s))}</strong>
           <span class="muted small">${fmtDate(s.date)} · ${st.makes}/${st.attempts} made</span></span>
-          <span class="hist-score">${s.kind === 'jyly' ? `${s.score}<small> pts</small>` : fmtPct(st.pct)}</span></div>
+          <span class="hist-score">${isGame(s) ? `${s.score}<small> pts</small>` : fmtPct(st.pct)}</span></div>
         <p class="tags">${S.byDistance([s], unit()).map((d) => `<span>${d.distance} ${unit()} <b>${d.makes}/${d.attempts}</b></span>`).join('')}</p>
         ${s.sets?.length ? `<p class="small">${setsLine(s.sets)}</p>` : ''}
+        ${s.kind === 'pp360' && s.stations?.length ? `<details class="small"><summary>Scorecard</summary>${pp360Card(s.stations)}</details>` : ''}
         ${s.notes ? `<p class="note small">${esc(s.notes)}</p>` : ''}
         <button class="link danger small" data-action="del-session" data-id="${s.id}">Delete</button>
       </li>`;
@@ -464,6 +519,8 @@ function viewProgress() {
   const overallTrend = S.overallTrend(all.filter((s) => s.kind !== 'jyly')).map((p) => ({ date: p.date, value: p.pct }));
   const jyly = all.filter((s) => s.kind === 'jyly').sort((a, b) => a.date.localeCompare(b.date));
   const best = jyly.length ? Math.max(...jyly.map((s) => s.score)) : null;
+  const pp360 = all.filter((s) => s.kind === 'pp360').sort((a, b) => a.date.localeCompare(b.date));
+  const pp360Best = pp360.length ? Math.max(...pp360.map((s) => s.score)) : null;
 
   return shell('progress', 'Progress', `
     <section class="result left"><p class="eyebrow">Your ${target}% distance</p>${headline}</section>
@@ -506,7 +563,10 @@ function viewProgress() {
       ${lineChart(overallTrend, { label: 'Overall make percentage per session' })}</section>
 
     ${jyly.length ? `<section class="panel"><div class="panel-head"><h3>JYLY score</h3><span class="small">best <strong>${best}</strong></span></div>
-      ${lineChart(jyly.map((s) => ({ date: s.date, value: s.score })), { yMax: Math.max(400, Math.ceil(best / 100) * 100), suffix: '', label: 'JYLY score per session' })}</section>` : ''}`);
+      ${lineChart(jyly.map((s) => ({ date: s.date, value: s.score })), { yMax: Math.max(400, Math.ceil(best / 100) * 100), suffix: '', label: 'JYLY score per session' })}</section>` : ''}
+
+    ${pp360.length ? `<section class="panel"><div class="panel-head"><h3>Perfect Putt 360 score</h3><span class="small">best <strong>${pp360Best}</strong></span></div>
+      ${lineChart(pp360.map((s) => ({ date: s.date, value: s.score })), { yMax: S.PP360_MAX, suffix: '', label: 'Perfect Putt 360 score per session' })}</section>` : ''}`);
 }
 
 // ---- routines -----------------------------------------------------------------
@@ -517,11 +577,12 @@ function viewRoutines() {
     <ul class="list rows">${state.routines
       .map((r) => `<li class="hist"><div class="hist-head"><span><strong>${esc(r.name)}</strong>
         <span class="muted small">${esc(routineSummary(r))}</span></span>
-        <span class="nowrap">${r.kind === 'jyly' ? '' : `<button class="link" data-action="edit-routine" data-id="${r.id}">Edit</button>`}
+        <span class="nowrap">${isGame(r) ? '' : `<button class="link" data-action="edit-routine" data-id="${r.id}">Edit</button>`}
         <button class="link danger" data-action="del-routine" data-id="${r.id}">Delete</button></span></div></li>`)
       .join('')}</ul>
     <div class="actions"><button class="btn primary" data-action="new-routine">New routine</button>
-    ${state.routines.some((r) => r.kind === 'jyly') ? '' : '<button class="btn ghost" data-action="add-jyly">Add JYLY</button>'}
+    ${Object.keys(GAMES).filter((kind) => !state.routines.some((r) => r.kind === kind))
+      .map((kind) => `<button class="btn ghost" data-action="add-game" data-kind="${kind}">Add ${GAMES[kind].name}</button>`).join('')}
     <button class="btn ghost" data-action="reset-routines">Restore the default routines</button></div>`);
 }
 
@@ -625,8 +686,10 @@ function saveActive() {
     id: uid(), date: a.startedAt, routineId: a.routineId, routineName: a.routineName, kind: a.kind, results,
     notes: (document.getElementById('notes')?.value ?? a.notes ?? '').trim(),
   };
-  if (a.kind === 'jyly') session.score = S.jylyScore(a.rounds);
-  else {
+  if (isGame(a)) {
+    session.score = gameScore(a);
+    if (a.kind === 'pp360') session.stations = a.rounds;
+  } else {
     const sets = buildSets(a);
     if (sets.length) { session.putters = clampPutters(a.putters); session.sets = sets; }
   }
@@ -692,11 +755,26 @@ const actions = {
     if (navigator.vibrate) navigator.vibrate(30);
     persist(); render();
   },
+  'pp360-toggle': (el) => {
+    const a = state.active;
+    a.pending = { ...a.pending, [el.dataset.key]: !a.pending?.[el.dataset.key] };
+    persist(); render();
+  },
+  pp360: (el) => {
+    const a = state.active;
+    const makes = Number(el.dataset.makes);
+    // All ten or none settle first and last by themselves.
+    const sure = makes === S.PP360_PUTTS ? true : makes === 0 ? false : null;
+    a.rounds.push({ makes, first: sure ?? !!a.pending?.first, last: sure ?? !!a.pending?.last });
+    a.pending = null;
+    if (navigator.vibrate) navigator.vibrate(makes === S.PP360_PUTTS ? [30, 40, 30] : 30);
+    persist(); render();
+  },
   undo: () => {
     const a = state.active;
     if (!a) return;
     if (a.finishedEarly) a.finishedEarly = false;
-    else if (a.kind === 'jyly') a.rounds.pop();
+    else if (isGame(a)) { a.rounds.pop(); a.pending = null; }
     else if (a.history?.length) {
       // Undo the last entry: one putt, a whole set, or a skipped station.
       const h = a.history.pop();
@@ -740,7 +818,7 @@ const actions = {
   'del-routine': (el) => ask('Delete this routine? Past sessions are kept.', 'Delete', () => {
     state.routines = state.routines.filter((r) => r.id !== el.dataset.id); persist(); render();
   }),
-  'add-jyly': () => { state.routines.push(structuredClone(DEFAULT_ROUTINES.find((r) => r.kind === 'jyly'))); persist(); render(); },
+  'add-game': (el) => { state.routines.push(structuredClone(DEFAULT_ROUTINES.find((r) => r.kind === el.dataset.kind))); persist(); render(); },
   'reset-routines': () => ask('Replace your routines with the defaults? Sessions are kept.', 'Replace', () => {
     state.routines = structuredClone(DEFAULT_ROUTINES); persist(); render();
   }),

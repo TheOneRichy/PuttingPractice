@@ -86,6 +86,44 @@ export function jylyToResults(rounds) {
   return rounds.map((r) => ({ ft: toFt(r.distanceM, 'm'), attempts: JYLY_PUTTS, makes: r.makes }));
 }
 
+// ---- Perfect Putt 360 ------------------------------------------------------
+// Two rounds of five stations (10, 15, 20, 25, 30 ft, or 3-9 m), 10 putts each.
+// Every make scores, with bonuses for holing the first putt, the last putt and
+// all ten. The last station counts double per make. A perfect station scores
+// 19 / 25 / 32 / 41 / 63, so a perfect game is 2 x 180 = 360.
+export const PP360_FT = [10, 15, 20, 25, 30];
+export const PP360_M = [3, 4.5, 6, 7.5, 9];
+export const PP360_PUTTS = 10;
+export const PP360_ROUNDS = 2;
+export const PP360_STATIONS = PP360_FT.length * PP360_ROUNDS;
+export const PP360_MAX = 360;
+export const PP360_POINTS = {
+  make: [1, 1, 1, 1, 2],
+  first: [2, 2, 3, 5, 8],
+  last: [2, 3, 4, 6, 10],
+  all: [5, 10, 15, 20, 25],
+};
+
+/** Score for the i-th station played (0-9): { makes, first, last }. */
+export function pp360StationScore(i, st) {
+  const d = i % PP360_FT.length;
+  const P = PP360_POINTS;
+  return st.makes * P.make[d] + (st.first ? P.first[d] : 0) + (st.last ? P.last[d] : 0)
+    + (st.makes >= PP360_PUTTS ? P.all[d] : 0);
+}
+
+export const pp360Score = (stations) => stations.reduce((sum, st, i) => sum + pp360StationScore(i, st), 0);
+
+/** Make counts that are possible given whether the first and last putt went in. */
+export const pp360MakesRange = (first, last) => ({
+  min: (first ? 1 : 0) + (last ? 1 : 0),
+  max: PP360_PUTTS - (first ? 0 : 1) - (last ? 0 : 1),
+});
+
+export function pp360ToResults(stations) {
+  return stations.map((st, i) => ({ ft: PP360_FT[i % PP360_FT.length], attempts: PP360_PUTTS, makes: st.makes }));
+}
+
 // ---- Dates ---------------------------------------------------------------
 export const dayKey = (iso) => iso.slice(0, 10);
 
