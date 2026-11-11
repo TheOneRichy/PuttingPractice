@@ -366,4 +366,37 @@ form .btn.ghost.small { align-self: flex-start; }
   max-width: calc(100% - 32px); text-align: center; z-index: 10; animation: toast-in .2s ease-out;
 }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+/* ---- tablets and wide windows ----
+   A live session fills the screen: the distance and tally on the left, the pad on the right,
+   everything big enough to hit from arm's length. Other pages just get a roomier column. */
+@media (min-width: 800px) {
+  .top, main { max-width: 760px; }
+}
+@media (min-width: 800px) and (orientation: landscape) {
+  .focus {
+    max-width: 1180px; padding-left: max(28px, env(safe-area-inset-left)); padding-right: max(28px, env(safe-area-inset-right));
+    display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto 1fr auto; column-gap: 40px;
+    grid-template-areas: "bar bar" "seg seg" "top pad" "top foot";
+  }
+  .focus-bar { grid-area: bar; }
+  .segments { grid-area: seg; }
+  .focus-top { grid-area: top; gap: 16px; }
+  .focus-pad { grid-area: pad; align-self: center; gap: 12px; }
+  .focus-foot { grid-area: foot; }
+  .focus-title { font-size: 1.1rem; }
+  .focus .eyebrow { font-size: .95rem; }
+  .distance { font-size: clamp(8rem, 22vh, 12rem); }
+  .tally { gap: 8px; max-width: 420px; }
+  .slot { width: 44px; height: 44px; font-size: 1.2rem; border-radius: 10px; }
+  .tally.pp360 { grid-template-columns: repeat(5, 44px); }
+  .pip { width: 22px; height: 22px; }
+  .running { font-size: 1.15rem; }
+  .running strong { font-size: 1.5rem; }
+  .pad-q { font-size: 1.1rem; }
+  .count-grid, .two.even { gap: 12px; }
+  .key { min-height: 84px; font-size: 2rem; }
+  .key.all { min-height: 104px; }
+  .key.miss, .two .key.all { min-height: 200px; }
+  .key.toggle { min-height: 68px; font-size: 1.2rem; }
+}
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
