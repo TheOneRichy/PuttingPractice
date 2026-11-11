@@ -158,3 +158,10 @@ input, select, textarea {
 .makes-grid.four .big { min-height: 72px; }
 .field.inline { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; }
 .field.inline select { width: auto; }
+
+/* Zone practice card */
+.zone-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.zone-pick .field { margin: 4px 0; }
+.big-pct.small-pct { font-size: 2.2rem; text-align: left; }
+tr.on td { font-weight: 700; }
+table select { width: 100%; }

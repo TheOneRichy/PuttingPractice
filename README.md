@@ -10,7 +10,7 @@ No accounts, no server, no build step. Data stays in your browser
 ## Features
 
 - **Routines** – station-based drills (distance × putts). Comes with
-  18 ft Zone Reps (8 sets at 18 ft), Circle 1 Ladder, C1X Grind and Circle 2 Reps; create and edit your own in
+  Circle 1 Ladder (2 sets each at 10–30 ft), C1X Grind and Circle 2 Reps; create and edit your own in
   feet or metres.
 - **JYLY** – the classic 20-round, 5-disc game (5–10 m, max 1000 points),
   with automatic distance changes and scoring.
@@ -26,12 +26,20 @@ No accounts, no server, no build step. Data stays in your browser
   reload.
 - **Quick log** – enter a session after the fact (distance / putts / made).
 - **History** – every session with per-distance breakdown and notes.
-- **Practice zone** – practise where you make about 85% of putts. Progress
-  shows your make % at the zone distance (18 ft by default) with a 95% range,
+- **Standard distances** – every distance is picked from a fixed list
+  (10, 15, 18, 20, 25, 30, 33, 40, 50, 66 ft; 3–10, 15, 20 m) so stats pile up
+  at the same marks. 10–30 ft in 5 ft steps is the common practice ladder,
+  33 ft is the edge of Circle 1 and 66 ft the edge of Circle 2. Older custom
+  distances are kept and shown as "(old)" in the routine editor.
+- **Zone practice** (Practice screen) – pick a standard distance (default
+  18 ft) and a number of sets, and putt there.
+- **Practice zone stats** – practise where you make about 85% of putts. Progress
+  shows your make % at any standard distance with a 95% range,
   says when you have enough putts for a reliable read (50+), and tells you
   whether to move in, move back or stay. It also estimates your 85% distance
-  from every distance you have logged. Distance and target % are set in
-  Settings; the session screen shows a running make % as you putt.
+  from every distance you have logged, and a table judging each standard
+  distance you have putted (too easy / in the zone / too hard). The target %
+  is set in Settings; the session screen shows a running make % as you putt.
 - **Progress** – total putts, overall make %, putts this week, day streak,
   make % by distance (all-time vs. last 30 days), trend charts per distance
   with a 5-session rolling average, and JYLY score history.

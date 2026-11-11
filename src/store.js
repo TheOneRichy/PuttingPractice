@@ -5,42 +5,37 @@ const KEY = 'putting-practice:v1';
 
 export const DEFAULT_ROUTINES = [
   {
-    id: 'zone-18',
-    name: '18 ft Zone Reps',
-    kind: 'stations',
-    unit: 'ft',
-    count: 'sets', // sets of your putters, so it fits however many you carry
-    stations: [{ distance: 18, sets: 8 }],
-  },
-  {
     id: 'c1-ladder',
     name: 'Circle 1 Ladder',
     kind: 'stations',
     unit: 'ft',
-    stations: [10, 15, 20, 25, 30].map((d) => ({ distance: d, putts: 10 })),
+    count: 'sets',
+    stations: [10, 15, 20, 25, 30].map((d) => ({ distance: d, sets: 2 })),
   },
   {
     id: 'c1x-grind',
     name: 'C1X Grind',
     kind: 'stations',
     unit: 'ft',
-    stations: [25, 28, 30, 33].map((d) => ({ distance: d, putts: 10 })),
+    count: 'sets',
+    stations: [20, 25, 30, 33].map((d) => ({ distance: d, sets: 2 })),
   },
   {
     id: 'c2-reps',
     name: 'Circle 2 Reps',
     kind: 'stations',
     unit: 'ft',
-    stations: [40, 50, 60].map((d) => ({ distance: d, putts: 10 })),
+    count: 'sets',
+    stations: [40, 50, 66].map((d) => ({ distance: d, sets: 2 })),
   },
   { id: 'jyly', name: 'JYLY (20 rounds)', kind: 'jyly', unit: 'm', stations: [] },
 ];
 
-export const DEFAULT_SETTINGS = { unit: 'ft', zoneFt: 18, zoneTarget: 85, putters: 6 };
+export const DEFAULT_SETTINGS = { unit: 'ft', zoneFt: 18, zoneTarget: 85, zoneSets: 8, putters: 6 };
 
 // Default routines added after launch, so existing users get them once too.
 // (Listed ids are only ever added once; deleting one keeps it deleted.)
-const LATER_DEFAULTS = ['zone-18'];
+const LATER_DEFAULTS = [];
 
 const fresh = () => ({
   settings: { ...DEFAULT_SETTINGS, seenDefaults: [...LATER_DEFAULTS] },
@@ -59,6 +54,21 @@ export function load() {
   }
 }
 
+// Earlier versions of default routines, keyed by id (see upgrade()).
+// Each entry lists old shapes; an untouched copy is replaced by the current
+// default, or removed when there is no current default (18 ft Zone Reps moved
+// to the Zone practice card on the Practice screen).
+const putts10 = (ds) => ds.map((d) => ({ distance: d, putts: 10 }));
+const RETIRED_DEFAULTS = {
+  'zone-18': [
+    { name: '18 ft Zone Reps', unit: 'ft', stations: putts10([18, 18, 18, 18, 18]) },
+    { name: '18 ft Zone Reps', unit: 'ft', count: 'sets', stations: [{ distance: 18, sets: 8 }] },
+  ],
+  'c1-ladder': [{ name: 'Circle 1 Ladder', unit: 'ft', stations: putts10([10, 15, 20, 25, 30]) }],
+  'c1x-grind': [{ name: 'C1X Grind', unit: 'ft', stations: putts10([25, 28, 30, 33]) }],
+  'c2-reps': [{ name: 'Circle 2 Reps', unit: 'ft', stations: putts10([40, 50, 60]) }],
+};
+
 function upgrade(state) {
   state.settings = { ...DEFAULT_SETTINGS, ...state.settings };
   const seen = new Set(state.settings.seenDefaults || []);
@@ -70,14 +80,14 @@ function upgrade(state) {
     seen.add(id);
   }
   state.settings.seenDefaults = [...seen];
-  // The first 18 ft Zone Reps was 5 x 10 putts, which split awkwardly into sets
-  // of putters. Swap it for the set-based version unless it has been edited.
-  const i = state.routines.findIndex((r) => r.id === 'zone-18');
-  const old = state.routines[i];
-  if (old && !old.count && old.name === '18 ft Zone Reps' && old.unit === 'ft' && old.stations.length === 5
-      && old.stations.every((st) => st.distance === 18 && st.putts === 10)) {
-    state.routines[i] = structuredClone(DEFAULT_ROUTINES.find((r) => r.id === 'zone-18'));
-  }
+  // Default routines that moved from putts to sets of putters: swap in the new
+  // version, but only where the saved copy is still the untouched old default.
+  const shape = (r) => JSON.stringify([r.name, r.unit, r.count || 'putts', r.stations]);
+  state.routines = state.routines.flatMap((r) => {
+    if (!(RETIRED_DEFAULTS[r.id] || []).some((old) => shape(old) === shape(r))) return [r];
+    const current = DEFAULT_ROUTINES.find((d) => d.id === r.id);
+    return current ? [structuredClone(current)] : [];
+  });
   return state;
 }
 
