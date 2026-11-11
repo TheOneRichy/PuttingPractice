@@ -234,6 +234,22 @@ textarea { min-height: 0; resize: vertical; }
 .key.miss { min-height: 120px; background: var(--miss); border-color: var(--miss); color: #fff; }
 .two { display: grid; grid-template-columns: 1fr 1.3fr; gap: 10px; }
 .two .key.all { min-height: 120px; }
+.two.even { grid-template-columns: 1fr 1fr; gap: 8px; }
+.count-grid.five { grid-template-columns: repeat(5, 1fr); }
+.key:disabled { opacity: .3; }
+.key.toggle { min-height: 56px; font-size: 1.05rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.key.toggle small { font-size: .8rem; font-weight: 700; color: var(--muted); }
+.key.toggle.on { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+.key.toggle.on small { color: inherit; opacity: .85; }
+.tally.pp360 { display: grid; grid-template-columns: repeat(5, 30px); }
+table.card { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .9rem; }
+table.card th, table.card td { padding: 5px 4px; text-align: center; }
+table.card th { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+table.card td:first-child, table.card th:first-child { text-align: left; }
+table.card td:last-child, table.card th:last-child { text-align: right; }
+table.card tr.round th { text-align: left; padding-top: 10px; border-bottom: 1px solid var(--line); }
+table.card .yes { color: var(--make); }
+details summary { cursor: pointer; color: var(--muted); font-weight: 600; padding: 4px 0; }
 .focus-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .foot-putters { display: flex; align-items: center; gap: 8px; font-size: .85rem; font-weight: 600; color: var(--muted); margin-right: auto; }
 .foot-putters .stepper { color: var(--ink); }

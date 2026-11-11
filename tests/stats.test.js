@@ -157,3 +157,25 @@ test('sessionProgress weights stations by putts and counts skipped ones as done'
   assert.equal(skipped.parts[0].fraction, 1);
   assert.equal(skipped.fraction, (10 + 3) / 40);
 });
+
+test('Perfect Putt 360 scoring', () => {
+  const st = (makes, first, last) => ({ makes, first: first === 'y', last: last === 'y' });
+  const perfect = Array.from({ length: S.PP360_STATIONS }, () => st(10, 'y', 'y'));
+  assert.deepEqual(perfect.slice(0, 5).map((x, i) => S.pp360StationScore(i, x)), [19, 25, 32, 41, 63]);
+  assert.equal(S.pp360Score(perfect), 360);
+  // A real card: 19 14 14 3 16 / 13 12 15 11 16 = 133
+  const card = [
+    st(10, 'y', 'y'), st(9, 'y', 'y'), st(7, 'y', 'y'), st(3, 'n', 'n'), st(4, 'y', 'n'),
+    st(9, 'y', 'y'), st(7, 'y', 'y'), st(8, 'y', 'y'), st(6, 'y', 'n'), st(4, 'y', 'n'),
+  ];
+  assert.deepEqual(card.map((x, i) => S.pp360StationScore(i, x)), [19, 14, 14, 3, 16, 13, 12, 15, 11, 16]);
+  assert.equal(S.pp360Score(card), 133);
+  assert.equal(S.pp360StationScore(1, st(9, 'n', 'y')), 12); // last only
+  assert.equal(S.pp360StationScore(4, st(4, 'y', 'y')), 26); // makes count double at the last station
+  assert.deepEqual(S.pp360MakesRange(false, false), { min: 0, max: 8 });
+  assert.deepEqual(S.pp360MakesRange(true, false), { min: 1, max: 9 });
+  assert.deepEqual(S.pp360MakesRange(true, true), { min: 2, max: 10 });
+  const res = S.pp360ToResults(card);
+  assert.deepEqual(res[6], { ft: 15, attempts: 10, makes: 7 });
+  assert.equal(S.atFeet([{ results: res }], 10).makes, 19);
+});

@@ -29,13 +29,14 @@ export const DEFAULT_ROUTINES = [
     stations: [40, 50, 66].map((d) => ({ distance: d, sets: 2 })),
   },
   { id: 'jyly', name: 'JYLY (20 rounds)', kind: 'jyly', unit: 'm', stations: [] },
+  { id: 'pp360', name: 'Perfect Putt 360', kind: 'pp360', unit: 'ft', stations: [] },
 ];
 
 export const DEFAULT_SETTINGS = { unit: 'ft', zoneFt: 18, zoneTarget: 85, zoneSets: 8, putters: 6 };
 
 // Default routines added after launch, so existing users get them once too.
 // (Listed ids are only ever added once; deleting one keeps it deleted.)
-const LATER_DEFAULTS = [];
+const LATER_DEFAULTS = ['pp360'];
 
 const fresh = () => ({
   settings: { ...DEFAULT_SETTINGS, seenDefaults: [...LATER_DEFAULTS] },
@@ -75,7 +76,7 @@ function upgrade(state) {
   for (const id of LATER_DEFAULTS) {
     if (seen.has(id)) continue;
     if (!state.routines.some((r) => r.id === id)) {
-      state.routines.unshift(structuredClone(DEFAULT_ROUTINES.find((r) => r.id === id)));
+      state.routines.push(structuredClone(DEFAULT_ROUTINES.find((r) => r.id === id)));
     }
     seen.add(id);
   }

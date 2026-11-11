@@ -30,7 +30,7 @@ about 85% of your putts**, and let the numbers tell you when to move.
   with the zone band, a 95% range on every point and the Circle 1 / Circle 2
   edges. Tap a distance in the list for its verdict (too easy / in the zone /
   too hard, last 30 days once there are 50+ putts) and its trend. Totals,
-  whole-session trend and JYLY scores follow.
+  whole-session trend, JYLY and Perfect Putt 360 scores follow.
 - **History** – sessions by month with makes per distance, set scores and notes.
 - **Settings** (gear, top right) – feet or metres, target make %, backup, reset.
 
@@ -41,6 +41,10 @@ Also in there:
   Grind and Circle 2 Reps; edit them or add your own from Practice → Edit.
 - **JYLY** – the 20-round, 5-disc game (5–10 m, max 1000 points) with automatic
   distance changes and scoring.
+- **Perfect Putt 360** – two rounds of 10 putts from 10, 15, 20, 25 and 30 ft
+  (3–9 m). Every make scores, with bonuses for the first putt, the last putt
+  and all ten; a perfect game is 360. Mark first/last, tap the count, and the
+  scorecard and score trend are kept for you.
 - **Standard distances** – every distance is picked from a fixed list
   (10, 15, 18, 20, 25, 30, 33, 40, 50, 66 ft; 3–10, 15, 20 m) so stats pile up
   at the same marks. 33 ft is the edge of Circle 1 and 66 ft the edge of
