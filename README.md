@@ -4,8 +4,9 @@ A small, phone-friendly web app for tracking disc golf putting practice:
 run routines on the practice basket, log makes and misses with big thumb-sized
 buttons, and watch your make % improve at each distance.
 
-No accounts, no server, no build step. Data stays in your browser
+No accounts, no server, no build step. Your putts stay in your browser
 (localStorage); use **Settings → Export JSON** for backups or to move devices.
+The live site sends anonymous usage counts (see [Usage stats](#usage-stats)).
 
 ## How it is laid out
 
@@ -63,6 +64,7 @@ Also in there:
 | `src/app.js` | Views (template strings), routing (`#hash`), event handling |
 | `src/charts.js` | SVG chart builders: data in, markup out, no app state |
 | `src/stats.js` | Pure logic: unit conversion, stats, JYLY scoring, streaks |
+| `src/analytics.js` | Loads PostHog and sends usage events; the only file that talks to it |
 | `src/store.js` | localStorage persistence, default routines, import validation |
 | `src/styles.css` | All styles (light + dark); every colour is a token at the top |
 | `tests/` | `node:test` tests for `src/stats.js` |
@@ -118,6 +120,33 @@ into `FEEDBACK_KEY` in `src/stats.js`. It is a public identifier, safe to
 commit: all it can do is send mail to its owner. While the key is empty, or
 when a send fails, the form hands the message to the sender's own mail app
 instead.
+
+### Usage stats
+
+The app reports anonymous usage to [PostHog](https://posthog.com) (US Cloud) so
+there are numbers for how many people use it and what they use. Paste the
+project token (`phc_…`, from PostHog → Settings → Project) into `ANALYTICS_KEY`
+in `src/stats.js`. Like the feedback key it is public and write-only. While it
+is empty nothing is loaded or sent.
+
+- **Who is counted** – each browser gets a random ID kept in localStorage (no
+  cookies, no login), which is what makes unique-visitor and returning-visitor
+  numbers work. PostHog also derives country, device and browser.
+- **What is sent** – a `$pageview` per screen (property `screen`), and
+  `session_started`, `session_saved`, `session_discarded`, `feedback_sent`,
+  `backup_exported`, `backup_imported`, `data_wiped`. Sessions carry `mode`
+  (`zone`, `routine`, `jyly`, `pp360`, `logged`), putt count, make %, game
+  score and minutes taken. Every event carries `unit` and `installed` (opened
+  from the home screen).
+- **What is never sent** – names, notes, routine names, distances, feedback
+  text. Autocapture and session recording are off; events are only the ones
+  `track()` is called with in `src/app.js`.
+- **Where** – only on `putt.richyarthurs.com` (`ANALYTICS_SITE`), so local runs
+  and preview deploys stay out of the numbers.
+- **Opting out** – Settings → Usage stats → Don't share.
+
+To add an event, call `track('name', { … })` in `src/app.js`; anything that
+decides what goes in it belongs in `src/stats.js` with a test.
 
 ### CI
 

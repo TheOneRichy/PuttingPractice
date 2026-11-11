@@ -352,3 +352,34 @@ export function feedbackPayload(key, { message, name = '', details = '' }) {
     message: [message.trim(), details && `--\n${details}`].filter(Boolean).join('\n\n'),
   };
 }
+
+// ---- usage stats --------------------------------------------------------------
+/**
+ * PostHog project token: where anonymous usage events are sent. Like FEEDBACK_KEY it is a
+ * public, write-only identifier, safe to commit. Leave it empty and nothing is loaded or sent.
+ */
+export const ANALYTICS_KEY = '';
+export const ANALYTICS_HOST = 'https://us.i.posthog.com';
+export const ANALYTICS_SCRIPT = 'https://us-assets.i.posthog.com/static/array.js';
+/** Only the live site reports, so local runs and preview deploys stay out of the numbers. */
+export const ANALYTICS_SITE = 'putt.richyarthurs.com';
+
+/** Whether usage events should be sent: a key is set, this is the live site, and the user has not turned it off. */
+export function analyticsOn(key, hostname, settings) {
+  return Boolean(key) && hostname === ANALYTICS_SITE && settings?.analytics !== false;
+}
+
+/** How a session (active or saved) was practised: zone, routine, jyly, pp360 or logged after the fact. */
+export function sessionMode({ kind, routineId }) {
+  if (kind === 'jyly' || kind === 'pp360') return kind;
+  if (kind === 'manual') return 'logged';
+  return String(routineId ?? '').startsWith('zone-') ? 'zone' : 'routine';
+}
+
+/** What a saved session reports: its shape and size, never its name, notes or distances. */
+export function sessionEventProps(session) {
+  const { makes, attempts } = sessionTotals(session);
+  const props = { mode: sessionMode(session), putts: attempts, make_pct: attempts ? Math.round((makes / attempts) * 100) : null };
+  if (session.score != null) props.score = session.score;
+  return props;
+}

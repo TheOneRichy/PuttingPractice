@@ -232,3 +232,21 @@ test('feedbackPayload carries the key, the message with details, and the sender 
   assert.equal(anon.from_name, 'Putting Practice');
   assert.equal(anon.message, 'hi');
 });
+
+test('analyticsOn needs a key, the live site, and no opt-out', () => {
+  assert.equal(S.analyticsOn('phc_x', S.ANALYTICS_SITE, { unit: 'ft' }), true);
+  assert.equal(S.analyticsOn('', S.ANALYTICS_SITE, {}), false);
+  assert.equal(S.analyticsOn('phc_x', 'localhost', {}), false);
+  assert.equal(S.analyticsOn('phc_x', S.ANALYTICS_SITE, { analytics: false }), false);
+});
+
+test('sessionEventProps reports shape and size, never names or distances', () => {
+  const zone = { kind: 'stations', routineId: 'zone-20', routineName: 'Zone practice · 20 ft', notes: 'windy',
+    results: [{ ft: 20, attempts: 30, makes: 24 }] };
+  assert.deepEqual(S.sessionEventProps(zone), { mode: 'zone', putts: 30, make_pct: 80 });
+  assert.equal(S.sessionMode({ kind: 'stations', routineId: 'abc' }), 'routine');
+  assert.equal(S.sessionMode({ kind: 'manual', routineId: null }), 'logged');
+  const game = { kind: 'jyly', routineId: 'jyly', score: 512, results: [{ ft: 16.4, attempts: 100, makes: 61 }] };
+  assert.deepEqual(S.sessionEventProps(game), { mode: 'jyly', putts: 100, make_pct: 61, score: 512 });
+  assert.equal(S.sessionEventProps({ kind: 'manual', results: [] }).make_pct, null);
+});

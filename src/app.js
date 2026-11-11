@@ -1,6 +1,7 @@
 import * as S from './stats.js';
 import { rangeChart, lineChart } from './charts.js';
 import { load, save, uid, validateImport, DEFAULT_ROUTINES } from './store.js';
+import { startAnalytics, track as send } from './analytics.js';
 
 let state = load();
 const app = document.getElementById('app');
@@ -10,6 +11,8 @@ const persist = () => save(state);
 const esc = (v) =>
   String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const unit = () => state.settings.unit;
+/** Report a usage event (see analytics.js). Every event carries the display unit. */
+const track = (event, props) => send(event, { unit: unit(), ...props });
 const fmtPct = (p) => `${Math.round(p)}%`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const fmtDate = (iso) =>
@@ -653,6 +656,11 @@ function viewSettings() {
       <label class="btn">Import backup<input type="file" id="import" accept="application/json" hidden></label></div>
     </section>
     ${feedbackPanel()}
+    ${S.ANALYTICS_KEY ? `<section class="panel">
+      <h3>Usage stats</h3>
+      <p class="muted small">Shares anonymous counts with Richy: which screens get opened, and the kind, size and make % of each session you save. Never your name, notes, routines or distances.</p>
+      ${seg('analytics', state.settings.analytics === false ? 'off' : 'on', [['on', 'Share'], ['off', 'Don’t share']])}
+    </section>` : ''}
     <section class="panel">
       <h3>Start over</h3>
       <p class="muted small">Deletes every session and routine on this device.</p>
@@ -668,7 +676,10 @@ function render() {
     progress: viewProgress, routines: viewRoutines, settings: viewSettings, feedback: viewFeedback,
   };
   app.innerHTML = (views[route] || viewPractice)();
+  const screen = views[route] ? route : 'practice';
+  if (screen !== shownScreen) { shownScreen = screen; track('$pageview', { screen }); }
 }
+let shownScreen = null;
 let lastRoute = null;
 window.addEventListener('hashchange', () => {
   render();
@@ -694,6 +705,7 @@ function startRoutineObj(saved) {
     stationSets: r.count === 'sets' ? r.stations.map((st) => st.sets) : null,
   };
   persist();
+  track('session_started', { mode: S.sessionMode(state.active) });
   go('session');
 }
 
@@ -714,6 +726,10 @@ function saveActive() {
   state.sessions.push(session);
   state.active = null;
   persist();
+  track('session_saved', {
+    ...S.sessionEventProps(session), finished_early: Boolean(a.finishedEarly),
+    minutes: Math.round((Date.now() - new Date(a.startedAt)) / 60000),
+  });
   go('practice');
   toast('Session saved');
 }
@@ -741,8 +757,9 @@ const actions = {
   'set-zone': (el) => { state.settings.zoneFt = S.toFt(Number(el.dataset.d), unit()); persist(); render(); },
   'set-setting': (el) => {
     const { key, value } = el.dataset;
-    state.settings[key] = key === 'unit' ? value : Number(value);
+    state.settings[key] = key === 'unit' ? value : key === 'analytics' ? value === 'on' : Number(value);
     persist(); render();
+    if (key === 'analytics') startAnalytics(state.settings);
   },
   feedback: async (el) => {
     const box = document.getElementById('feedback');
@@ -764,6 +781,7 @@ const actions = {
       box.value = '';
       fallback.hidden = true;
       toast('Sent. Thanks!');
+      track('feedback_sent');
     } catch {
       // Keep the message, and offer the mail app with it filled in as a way out.
       document.getElementById('feedback-mail').href = mailto;
@@ -837,6 +855,7 @@ const actions = {
   'finish-early': () => { state.active.finishedEarly = true; persist(); render(); },
   'save-session': saveActive,
   discard: () => ask('Discard this session? Its putts will not be saved.', 'Discard', () => {
+    track('session_discarded', { mode: S.sessionMode(state.active) });
     state.active = null; persist(); go('practice');
   }),
   'ql-add': () => document.getElementById('ql-rows').insertAdjacentHTML('beforeend', qlRow()),
@@ -869,6 +888,7 @@ const actions = {
     state.routines = structuredClone(DEFAULT_ROUTINES); persist(); render();
   }),
   wipe: () => ask('Delete ALL sessions and routines on this device? This cannot be undone.', 'Delete everything', () => {
+    track('data_wiped');
     localStorage.clear(); state = load(); go('practice');
   }),
   export: () => {
@@ -878,6 +898,7 @@ const actions = {
     a.download = `putting-practice-${todayKey()}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
+    track('backup_exported');
   },
 };
 
@@ -912,6 +933,8 @@ app.addEventListener('change', (e) => {
     file.text().then((txt) => {
       try {
         state = validateImport(JSON.parse(txt)); persist();
+        startAnalytics(state.settings); // the backup carries its own settings
+        track('backup_imported');
         go('history'); toast(`Imported ${plural(state.sessions.length, 'session')}`);
       } catch (err) { toast(err instanceof SyntaxError ? 'That file is not a backup from this app.' : err.message); }
     });
@@ -935,7 +958,8 @@ app.addEventListener('submit', (e) => {
       kind: 'manual', notes: form.notes.value.trim(),
       results: data.map((r) => ({ ft: S.toFt(r.d, unit()), attempts: r.p, makes: r.m })),
     });
-    persist(); go('history'); toast('Session saved');
+    persist(); track('session_saved', S.sessionEventProps(state.sessions.at(-1)));
+    go('history'); toast('Session saved');
   }
   if (form.id === 'routine-form') {
     editing.name = form.name.value.trim();
@@ -954,4 +978,5 @@ app.addEventListener('submit', (e) => {
 });
 
 lastRoute = location.hash.slice(1);
+startAnalytics(state.settings);
 render();
