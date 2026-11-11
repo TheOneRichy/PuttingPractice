@@ -625,11 +625,11 @@ function feedbackPanel() {
   return `
     <section class="panel">
       <h3>Feedback</h3>
-      <p class="muted small">Found a bug, or want something added? This goes straight to Richy${S.FEEDBACK_KEY ? '' : '. Send opens your mail app with the message ready to go'}.</p>
+      <p class="muted small">Found a bug, or want something added? This goes straight to Richy.</p>
       <label class="field">Your message <textarea id="feedback" rows="4" placeholder="What happened, or what would make this better?"></textarea></label>
-      ${S.FEEDBACK_KEY ? '<label class="field">Your name <input id="feedback-name" autocomplete="name" placeholder="Optional, so Richy knows who to thank"></label>' : ''}
+      <label class="field">Your name <input id="feedback-name" autocomplete="name" placeholder="Optional, so Richy knows who to thank"></label>
       <div class="actions-row"><button class="btn primary" data-action="feedback">Send feedback</button></div>
-      <p class="muted small" id="feedback-fallback" ${S.FEEDBACK_KEY ? 'hidden' : ''}>${S.FEEDBACK_KEY ? 'That did not send. Check your connection and try again, or' : 'Nothing opened?'} <a id="feedback-mail" href="mailto:${S.FEEDBACK_EMAIL}">${S.FEEDBACK_KEY ? 'send it from your mail app' : S.FEEDBACK_EMAIL}</a>.</p>
+      <p class="muted small" id="feedback-fallback" hidden>That did not send. Your message is still here: check your connection and try again.</p>
     </section>`;
 }
 const viewFeedback = () => subpage('Feedback', feedbackPanel());
@@ -765,8 +765,7 @@ const actions = {
     const box = document.getElementById('feedback');
     if (!box.value.trim()) { toast('Write a message first.'); box.focus(); return; }
     const details = `${plural(state.sessions.length, 'session')} logged, ${unit() === 'm' ? 'metres' : 'feet'}\n${navigator.userAgent}`;
-    const mailto = S.feedbackMailto(box.value, details);
-    if (!S.FEEDBACK_KEY) { location.href = mailto; return; }
+    if (!S.FEEDBACK_KEY) { toast('Feedback is not set up yet.'); return; }
     const fallback = document.getElementById('feedback-fallback');
     el.disabled = true; el.textContent = 'Sending…';
     try {
@@ -783,8 +782,7 @@ const actions = {
       toast('Sent. Thanks!');
       track('feedback_sent');
     } catch {
-      // Keep the message, and offer the mail app with it filled in as a way out.
-      document.getElementById('feedback-mail').href = mailto;
+      // Keep the message so it can be sent again.
       fallback.hidden = false;
       toast('Could not send that.');
     }

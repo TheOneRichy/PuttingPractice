@@ -117,9 +117,9 @@ removes a whole class of "why is my fix not showing up" confusion.
 Settings → Feedback posts the message to [Web3Forms](https://web3forms.com),
 which emails it to the inbox its access key was created for. Paste that key
 into `FEEDBACK_KEY` in `src/stats.js`. It is a public identifier, safe to
-commit: all it can do is send mail to its owner. While the key is empty, or
-when a send fails, the form hands the message to the sender's own mail app
-instead.
+commit: all it can do is send mail to its owner. When a send fails the form
+keeps the message and asks the sender to try again. No email address appears in
+the app or the repo.
 
 ### Usage stats
 

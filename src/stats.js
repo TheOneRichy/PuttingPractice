@@ -322,22 +322,10 @@ export function sessionProgress(stations, log, stationIdx = 0) {
 }
 
 // ---- feedback ----------------------------------------------------------------
-export const FEEDBACK_EMAIL = 'richardvarthurs@gmail.com';
-
-/**
- * A mailto: link that opens the sender's own mail app with the message filled in.
- * `details` (device, app state) goes under a divider so a bug report arrives with context.
- */
-export function feedbackMailto(message, details = '') {
-  const body = [message.trim(), details && `--\n${details}`].filter(Boolean).join('\n\n');
-  // encodeURIComponent, not URLSearchParams: mail apps show "+" literally instead of as a space.
-  return `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent('Putting Practice feedback')}&body=${encodeURIComponent(body)}`;
-}
-
 /**
  * Web3Forms delivers a posted message to the inbox its access key belongs to, so feedback
  * can be sent from inside the app. The key is a public identifier, not a secret: it can only
- * send mail to its owner. Leave it empty and feedback falls back to the sender's mail app.
+ * send mail to its owner. Leave it empty and the form says feedback is not set up.
  */
 export const FEEDBACK_KEY = 'ddc9951e-af56-48c3-8b66-a453667f54a8';
 export const FEEDBACK_URL = 'https://api.web3forms.com/submit';
