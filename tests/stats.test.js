@@ -112,3 +112,11 @@ test('setStats counts sets, clean sets and average makes', () => {
   assert.deepEqual(st, { count: 3, clean: 2, makes: 14, attempts: 16, avgMakes: 14 / 3 });
   assert.equal(S.setStats([]).avgMakes, 0);
 });
+
+test('expandStations turns sets into putts using the putter count', () => {
+  const sets = { count: 'sets', stations: [{ distance: 18, sets: 8 }, { distance: 21, sets: 2 }] };
+  assert.deepEqual(S.expandStations(sets, 6), [{ distance: 18, putts: 48 }, { distance: 21, putts: 12 }]);
+  assert.deepEqual(S.expandStations(sets, 1), [{ distance: 18, putts: 8 }, { distance: 21, putts: 2 }]);
+  const putts = { stations: [{ distance: 10, putts: 10 }] };
+  assert.deepEqual(S.expandStations(putts, 6), [{ distance: 10, putts: 10 }]);
+});

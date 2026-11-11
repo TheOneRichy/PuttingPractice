@@ -10,7 +10,7 @@ No accounts, no server, no build step. Data stays in your browser
 ## Features
 
 - **Routines** – station-based drills (distance × putts). Comes with
-  18 ft Zone Reps (5 × 10 at 18 ft), Circle 1 Ladder, C1X Grind and Circle 2 Reps; create and edit your own in
+  18 ft Zone Reps (8 sets at 18 ft), Circle 1 Ladder, C1X Grind and Circle 2 Reps; create and edit your own in
   feet or metres.
 - **JYLY** – the classic 20-round, 5-disc game (5–10 m, max 1000 points),
   with automatic distance changes and scoring.
@@ -18,7 +18,9 @@ No accounts, no server, no build step. Data stays in your browser
   or mid-session). With more than one, throw them all, walk up and tap how
   many went in; Undo takes back the whole set. Set scores and clean sets
   (all in) show on the finish screen and in History. Choose 1 to tap each
-  putt as Make / Miss.
+  putt as Make / Miss. A routine can count each distance in putts or in
+  **sets of your putters** (chosen in the routine editor); set-based routines
+  work out their putt count from your putters setting, e.g. 8 sets × 6 = 48.
 - **Live session screen** – Make / Miss buttons, progress pips, undo, skip a
   station, finish early, add notes. An in-progress session survives a page
   reload.
