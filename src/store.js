@@ -17,7 +17,8 @@ export const DEFAULT_ROUTINES = [
     name: 'Circle 1 Ladder',
     kind: 'stations',
     unit: 'ft',
-    stations: [10, 15, 20, 25, 30].map((d) => ({ distance: d, putts: 10 })),
+    count: 'sets',
+    stations: [10, 15, 20, 25, 30].map((d) => ({ distance: d, sets: 2 })),
   },
   {
     id: 'c1x-grind',
@@ -59,6 +60,14 @@ export function load() {
   }
 }
 
+// Earlier versions of default routines, keyed by id (see upgrade()).
+const RETIRED_DEFAULTS = {
+  'zone-18': { name: '18 ft Zone Reps', unit: 'ft',
+    stations: Array.from({ length: 5 }, () => ({ distance: 18, putts: 10 })) },
+  'c1-ladder': { name: 'Circle 1 Ladder', unit: 'ft',
+    stations: [10, 15, 20, 25, 30].map((d) => ({ distance: d, putts: 10 })) },
+};
+
 function upgrade(state) {
   state.settings = { ...DEFAULT_SETTINGS, ...state.settings };
   const seen = new Set(state.settings.seenDefaults || []);
@@ -70,14 +79,13 @@ function upgrade(state) {
     seen.add(id);
   }
   state.settings.seenDefaults = [...seen];
-  // The first 18 ft Zone Reps was 5 x 10 putts, which split awkwardly into sets
-  // of putters. Swap it for the set-based version unless it has been edited.
-  const i = state.routines.findIndex((r) => r.id === 'zone-18');
-  const old = state.routines[i];
-  if (old && !old.count && old.name === '18 ft Zone Reps' && old.unit === 'ft' && old.stations.length === 5
-      && old.stations.every((st) => st.distance === 18 && st.putts === 10)) {
-    state.routines[i] = structuredClone(DEFAULT_ROUTINES.find((r) => r.id === 'zone-18'));
-  }
+  // Default routines that moved from putts to sets of putters: swap in the new
+  // version, but only where the saved copy is still the untouched old default.
+  const shape = (r) => JSON.stringify([r.name, r.unit, r.count || 'putts', r.stations]);
+  state.routines = state.routines.map((r) => {
+    const old = RETIRED_DEFAULTS[r.id];
+    return old && shape(r) === shape(old) ? structuredClone(DEFAULT_ROUTINES.find((d) => d.id === r.id)) : r;
+  });
   return state;
 }
 

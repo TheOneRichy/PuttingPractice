@@ -10,7 +10,7 @@ No accounts, no server, no build step. Data stays in your browser
 ## Features
 
 - **Routines** – station-based drills (distance × putts). Comes with
-  18 ft Zone Reps (8 sets at 18 ft), Circle 1 Ladder, C1X Grind and Circle 2 Reps; create and edit your own in
+  18 ft Zone Reps (8 sets at 18 ft), Circle 1 Ladder (2 sets each at 10–30 ft), C1X Grind and Circle 2 Reps; create and edit your own in
   feet or metres.
 - **JYLY** – the classic 20-round, 5-disc game (5–10 m, max 1000 points),
   with automatic distance changes and scoring.

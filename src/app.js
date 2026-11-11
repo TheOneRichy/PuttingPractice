@@ -21,9 +21,13 @@ const routineSummary = (r) => {
   if (r.count === 'sets') {
     const p = puttersPref();
     const sets = r.stations.reduce((n, s) => n + s.sets, 0);
-    const where = r.stations.length === 1 ? `at ${r.stations[0].distance} ${r.unit}`
-      : `${r.stations.length} distances (${r.stations.map((s) => s.distance).join(' · ')} ${r.unit})`;
-    return `${sets} set${sets === 1 ? '' : 's'} ${where} · ${sets * p} putts with ${p} putter${p === 1 ? '' : 's'}`;
+    const st = r.stations;
+    const dists = `${st.map((s) => s.distance).join(' · ')} ${r.unit}`;
+    const plural = (n) => `${n} set${n === 1 ? '' : 's'}`;
+    const where = st.length === 1 ? `${plural(sets)} at ${dists}`
+      : st.every((s) => s.sets === st[0].sets) ? `${plural(st[0].sets)} each at ${dists}`
+      : `${plural(sets)} across ${dists}`;
+    return `${where} · ${sets * p} putts with ${p} putter${p === 1 ? '' : 's'}`;
   }
   const total = r.stations.reduce((n, s) => n + s.putts, 0);
   const st = r.stations;
