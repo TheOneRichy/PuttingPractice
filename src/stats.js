@@ -154,12 +154,15 @@ export function sessionsSince(sessions, sinceIso) {
 // my 85% distance?" with enough statistics to know when the sample is too small.
 
 /** Makes/attempts at one distance in whole feet, across all sessions. */
-export function atFeet(sessions, ft) {
+export const atFeet = (sessions, ft) => atDistance(sessions, 'ft', ft);
+
+/** Makes/attempts at one whole distance in the given unit, across all sessions. */
+export function atDistance(sessions, unit, distance) {
   let attempts = 0;
   let makes = 0;
   for (const s of sessions) {
     for (const r of s.results) {
-      if (Math.round(r.ft) === ft) {
+      if (displayDistance(r.ft, unit) === distance) {
         attempts += r.attempts;
         makes += r.makes;
       }
@@ -261,7 +264,8 @@ export function expandStations(routine, putters) {
 // Every distance you can pick comes from these lists, so stats pile up at the
 // same marks instead of scattering across 17, 19, 22 ft... 10-30 ft in 5 ft
 // steps is the common practice ladder; 18 ft is the zone default; 33 ft (10 m)
-// is the edge of Circle 1 and 66 ft (20 m) the edge of Circle 2.
+// is the edge of Circle 1 and 66 ft (20 m) the edge of Circle 2. Metres get
+// their own round marks rather than the feet marks converted.
 export const STANDARD_FT = [10, 15, 18, 20, 25, 30, 33, 40, 50, 66];
 export const STANDARD_M = [3, 4, 5, 6, 7, 8, 9, 10, 15, 20];
 export const standardDistances = (unit) => (unit === 'm' ? STANDARD_M : STANDARD_FT);
@@ -271,10 +275,25 @@ export function nearestStandard(value, unit) {
   return standardDistances(unit).reduce((best, d) => (Math.abs(d - value) < Math.abs(best - value) ? d : best));
 }
 
-/** The next standard distance (ft) further out (dir 1) or closer in (dir -1); null at the ends. */
-export function stepStandard(ft, dir) {
-  const i = STANDARD_FT.indexOf(ft);
-  return i < 0 ? null : STANDARD_FT[i + dir] ?? null;
+/** The next standard distance further out (dir 1) or closer in (dir -1), same unit; null at the ends. */
+export function stepStandard(distance, dir, unit = 'ft') {
+  const marks = standardDistances(unit);
+  const i = marks.indexOf(distance);
+  return i < 0 ? null : marks[i + dir] ?? null;
+}
+
+/**
+ * A routine as it is putted in the given unit. A routine written in the other
+ * unit has each distance rounded to a whole number of this one (15 ft -> 5 m),
+ * so the basket is paced off in round numbers. JYLY is always in metres.
+ */
+export function routineIn(routine, unit) {
+  if (routine.kind === 'jyly' || routine.unit === unit) return routine;
+  return {
+    ...routine,
+    unit,
+    stations: routine.stations.map((s) => ({ ...s, distance: Math.max(1, Math.round(fromFt(toFt(s.distance, routine.unit), unit))) })),
+  };
 }
 
 /**
@@ -282,9 +301,9 @@ export function stepStandard(ft, dir) {
  * back when it is clearly too easy, one mark in when clearly too hard, else
  * null (stay put - including while the verdict is only "leaning").
  */
-export function zoneMove(status, ft) {
-  if (status === 'too-easy') return stepStandard(ft, 1);
-  if (status === 'too-hard') return stepStandard(ft, -1);
+export function zoneMove(status, distance, unit = 'ft') {
+  if (status === 'too-easy') return stepStandard(distance, 1, unit);
+  if (status === 'too-hard') return stepStandard(distance, -1, unit);
   return null;
 }
 

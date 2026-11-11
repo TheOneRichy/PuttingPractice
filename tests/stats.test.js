@@ -138,6 +138,35 @@ test('stepStandard walks the standard marks and stops at the ends', () => {
   assert.equal(S.stepStandard(17, 1), null);
 });
 
+test('atDistance groups putts by whole metres or feet', () => {
+  const sessions = [{ results: [
+    { ft: 18, attempts: 10, makes: 8 }, // 5.49 m -> 5 m
+    { ft: S.toFt(5, 'm'), attempts: 10, makes: 6 },
+    { ft: 20, attempts: 10, makes: 5 }, // 6.1 m -> 6 m
+  ] }];
+  assert.deepEqual(S.atDistance(sessions, 'm', 5), { attempts: 20, makes: 14, pct: 70 });
+  assert.equal(S.atDistance(sessions, 'm', 6).attempts, 10);
+  assert.equal(S.atDistance(sessions, 'ft', 18).attempts, 10);
+});
+
+test('metric zone marks step in whole metres', () => {
+  assert.equal(S.stepStandard(5, 1, 'm'), 6);
+  assert.equal(S.zoneMove('too-hard', 5, 'm'), 4);
+  assert.equal(S.zoneMove('too-easy', 20, 'm'), null);
+});
+
+test('routineIn rounds a routine to whole distances in the other unit', () => {
+  const ladder = { name: 'Ladder', unit: 'ft', count: 'sets', stations: [10, 15, 20, 25, 30].map((d) => ({ distance: d, sets: 2 })) };
+  const m = S.routineIn(ladder, 'm');
+  assert.equal(m.unit, 'm');
+  assert.deepEqual(m.stations.map((s) => s.distance), [3, 5, 6, 8, 9]);
+  assert.equal(m.stations[0].sets, 2);
+  assert.equal(S.routineIn(ladder, 'ft'), ladder);
+  assert.deepEqual(S.routineIn({ unit: 'm', stations: [{ distance: 6, putts: 10 }] }, 'ft').stations, [{ distance: 20, putts: 10 }]);
+  const jyly = { kind: 'jyly', unit: 'm', stations: [] };
+  assert.equal(S.routineIn(jyly, 'ft'), jyly);
+});
+
 test('zoneMove only moves on a clear verdict', () => {
   assert.equal(S.zoneMove('too-easy', 18), 20);
   assert.equal(S.zoneMove('too-hard', 18), 15);

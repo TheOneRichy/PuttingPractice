@@ -27,8 +27,8 @@ const totals = (sessions) => sessions.reduce((a, s) => {
 const routineSummary = (r) => {
   if (r.kind === 'jyly') return '20 rounds of 5 putts · 5–10 m';
   if (r.kind === 'pp360') return `2 rounds of 10 putts from ${pp360Dists().join(' · ')} ${unit()}`;
-  const st = r.stations;
-  const dists = `${[...new Set(st.map((s) => distNum(S.toFt(s.distance, r.unit))))].join(' · ')} ${unit()}`;
+  const st = S.routineIn(r, unit()).stations;
+  const dists = `${[...new Set(st.map((s) => s.distance))].join(' · ')} ${unit()}`;
   const putts = S.expandStations(r, puttersPref()).reduce((n, s) => n + s.putts, 0);
   return `${dists} · ${plural(putts, 'putt')}`;
 };
@@ -70,7 +70,10 @@ function setsLine(sets) {
 }
 
 // ---- practice zone ---------------------------------------------------------
-const zoneFt = () => (S.STANDARD_FT.includes(Number(state.settings.zoneFt)) ? Number(state.settings.zoneFt) : 18);
+// The zone is saved in feet and shown as the nearest standard mark of the display unit,
+// so switching units and back without picking a new distance changes nothing.
+const zoneMark = () => S.nearestStandard(S.fromFt(Number(state.settings.zoneFt) || 18, unit()), unit());
+const fmtMark = (d) => `${d} ${unit()}`;
 const zoneSets = () => Math.min(30, Math.max(1, Number(state.settings.zoneSets) || 8));
 const zoneTarget = () => Number(state.settings.zoneTarget) || 85;
 const ZONE_MIN = 50; // putts before the app makes a call
@@ -81,8 +84,9 @@ const distNum = (ft) => (unit() === 'm' ? String(Number(S.fromFt(ft, 'm').toFixe
 const fmtDist = (ft) => `${distNum(ft)} ${unit()}`;
 /** Session title. Zone practice is named from its distance so it follows the unit setting. */
 const sessionName = (x) => {
-  const zone = /^zone-(\d+)$/.exec(x.routineId || '');
-  return zone && String(x.routineName).startsWith('Zone practice') ? `Zone practice · ${fmtDist(Number(zone[1]))}` : x.routineName;
+  const zone = /^zone-(\d+)(m?)$/.exec(x.routineId || '');
+  return zone && String(x.routineName).startsWith('Zone practice')
+    ? `Zone practice · ${fmtDist(S.toFt(Number(zone[1]), zone[2] || 'ft'))}` : x.routineName;
 };
 const zoneMessages = {
   'need-more': (v) => `${plural(v.needed, 'more putt')} here and you get a reliable read.`,
@@ -112,21 +116,22 @@ function judge(all, recent) {
   const useRecent = recent.attempts >= ZONE_MIN && recent.attempts < all.attempts;
   return { all, recent, useRecent, v: S.zoneVerdict(useRecent ? recent : all, zoneOpts()) };
 }
-/** Zone verdict at a standard distance in feet (default: the zone distance). */
-function zoneReport(sessions, ft = zoneFt()) {
-  return { ft, ...judge(S.atFeet(sessions, ft), S.atFeet(S.sessionsSince(sessions, daysAgo(30)), ft)) };
+/** Zone verdict at a standard distance in the display unit (default: the zone distance). */
+function zoneReport(sessions, d = zoneMark()) {
+  const u = unit();
+  return { d, ...judge(S.atDistance(sessions, u, d), S.atDistance(S.sessionsSince(sessions, daysAgo(30)), u, d)) };
 }
 /** Sentence + optional "move" button for a zone report. */
 function advice(z, { after = false } = {}) {
-  const move = S.zoneMove(z.v.status, z.ft);
+  const move = S.zoneMove(z.v.status, z.d, unit());
   const text = zoneMessages[z.v.status](z.v);
   if (move == null) return `<p class="advice">${text}</p>`;
-  if (move === zoneFt()) return `<p class="advice">${text} Your zone is set to <strong>${fmtDist(move)}</strong>.</p>`;
-  const step = `Step ${move > z.ft ? 'back' : 'in'} to ${fmtDist(move)}${after ? ' next time' : ''}.`;
+  if (move === zoneMark()) return `<p class="advice">${text} Your zone is set to <strong>${fmtMark(move)}</strong>.</p>`;
+  const step = `Step ${move > z.d ? 'back' : 'in'} to ${fmtMark(move)}${after ? ' next time' : ''}.`;
   // Only offer to move the zone from the zone distance itself.
-  if (z.ft !== zoneFt()) return `<p class="advice">${text}</p>`;
+  if (z.d !== zoneMark()) return `<p class="advice">${text}</p>`;
   return `<p class="advice">${text} ${step}</p>
-    <button class="btn small" data-action="set-zone" data-ft="${move}">Move zone to ${fmtDist(move)}</button>`;
+    <button class="btn small" data-action="set-zone" data-d="${move}">Move zone to ${fmtMark(move)}</button>`;
 }
 
 const go = (hash) => {
@@ -182,10 +187,10 @@ function subpage(title, body, back = 'practice') {
 function zoneHero() {
   const p = puttersPref();
   const z = zoneReport(state.sessions);
-  const chips = S.STANDARD_FT.map((ft) => {
-    const r = ft === z.ft ? z : zoneReport(state.sessions, ft);
-    return `<button class="chip ${ft === z.ft ? 'on' : ''} ${r.v.status}" data-action="set-zone" data-ft="${ft}" aria-pressed="${ft === z.ft}">
-      <b>${distNum(ft)}</b><span>${r.all.attempts ? fmtPct(r.v.pct) : '–'}</span></button>`;
+  const chips = S.standardDistances(unit()).map((d) => {
+    const r = d === z.d ? z : zoneReport(state.sessions, d);
+    return `<button class="chip ${d === z.d ? 'on' : ''} ${r.v.status}" data-action="set-zone" data-d="${d}" aria-pressed="${d === z.d}">
+      <b>${d}</b><span>${r.all.attempts ? fmtPct(r.v.pct) : '–'}</span></button>`;
   }).join('');
   const read = z.all.attempts
     ? `<p class="hero-pct">${fmtPct(z.v.pct)}</p><p class="muted small">${plural(z.v.attempts, 'putt')}${z.useRecent ? ' · 30 days' : ''}</p>${pill(z.v)}`
@@ -193,7 +198,7 @@ function zoneHero() {
   return `<section class="hero" aria-label="Zone practice">
     <p class="eyebrow">Zone practice · aim for ${zoneTarget()}%</p>
     <div class="hero-head">
-      <div><p class="hero-dist">${fmtDist(z.ft).replace(/ (\w+)$/, '<small>$1</small>')}</p></div>
+      <div><p class="hero-dist">${z.d}<small>${unit()}</small></p></div>
       <div class="hero-read">${read}</div>
     </div>
     <div class="chips" role="group" aria-label="Distance (${unit()}), with your make % at each">${chips}</div>
@@ -202,7 +207,7 @@ function zoneHero() {
       <div class="setup-item"><span>Sets</span> ${stepper('zoneSets', zoneSets(), 'Sets', { min: 1, max: 30 })}</div>
       <div class="setup-item"><span>Putters per set</span> ${stepper('putters', p, 'Putters per set', { min: 1, max: S.MAX_PUTTERS })}</div>
     </div>
-    <button class="btn primary xl" data-action="start-zone" ${state.active ? 'disabled' : ''}>Start ${plural(zoneSets() * p, 'putt')} at ${fmtDist(z.ft)}</button>
+    <button class="btn primary xl" data-action="start-zone" ${state.active ? 'disabled' : ''}>Start ${plural(zoneSets() * p, 'putt')} at ${fmtMark(z.d)}</button>
   </section>`;
 }
 
@@ -393,13 +398,13 @@ function viewFinish(a) {
     : a.stations.map((st, i) => (a.log[i].length ? barRow(fmtDist(S.toFt(st.distance, a.unit)), a.log[i].filter(Boolean).length, a.log[i].length) : ''));
   const sets = isGame(a) ? [] : buildSets(a);
   // Zone check at the zone distance if putted, else the standard distance with the most putts.
-  const putted = S.STANDARD_FT.map((ft) => ({ ft, ...S.atFeet([{ results }], ft) })).filter((x) => x.attempts);
-  const check = putted.find((x) => x.ft === zoneFt()) || putted.sort((x, y) => y.attempts - x.attempts)[0];
+  const putted = S.standardDistances(unit()).map((d) => ({ d, ...S.atDistance([{ results }], unit(), d) })).filter((x) => x.attempts);
+  const check = putted.find((x) => x.d === zoneMark()) || putted.sort((x, y) => y.attempts - x.attempts)[0];
   let zoneBlock = '';
   if (check && a.kind !== 'jyly') {
-    const z = zoneReport([...state.sessions, { date: new Date().toISOString(), results }], check.ft);
+    const z = zoneReport([...state.sessions, { date: new Date().toISOString(), results }], check.d);
     zoneBlock = `<section class="panel">
-      <div class="panel-head"><h3>${fmtDist(z.ft)} with this session</h3>${pill(z.v)}</div>
+      <div class="panel-head"><h3>${fmtMark(z.d)} with this session</h3>${pill(z.v)}</div>
       <p class="small"><strong>${fmtPct(z.v.pct)}</strong> over ${plural(z.v.attempts, 'putt')}${z.useRecent ? ' in the last 30 days' : ''},
         likely between ${fmtPct(z.v.lo)} and ${fmtPct(z.v.hi)}.</p>
       ${advice(z, { after: true })}</section>`;
@@ -492,12 +497,12 @@ function viewProgress() {
     const j = judge(d, recent.get(d.distance) || { attempts: 0, makes: 0 });
     return { distance: d.distance, ...j, pct: j.v.pct, lo: j.v.lo, hi: j.v.hi, attempts: j.v.attempts, status: j.v.status };
   });
-  const zoneD = S.displayDistance(zoneFt(), u);
+  const zoneD = zoneMark();
   if (!rows.some((r) => r.distance === progressDistance)) {
     progressDistance = rows.some((r) => r.distance === zoneD) ? zoneD : [...rows].sort((a, b) => b.all.attempts - a.all.attempts)[0].distance;
   }
   const sel = rows.find((r) => r.distance === progressDistance);
-  const selFt = S.STANDARD_FT.find((ft) => S.displayDistance(ft, u) === sel.distance);
+  const selD = S.standardDistances(u).includes(sel.distance) ? sel.distance : null;
 
   const est = S.targetDistance(all, { target, minAttempts: 20 });
   const headline = !est
@@ -540,9 +545,9 @@ function viewProgress() {
       <p class="small"><strong>${fmtPct(sel.pct)}</strong> over ${plural(sel.attempts, 'putt')}${sel.useRecent ? ' in the last 30 days' : ''},
         likely between <strong>${fmtPct(sel.lo)}</strong> and <strong>${fmtPct(sel.hi)}</strong>.
         ${sel.useRecent ? `<span class="muted">All time ${fmtPct(sel.all.pct)} of ${sel.all.attempts}.</span>` : ''}</p>
-      ${selFt != null ? advice({ ft: selFt, v: sel.v }) : `<p class="advice">${zoneMessages[sel.v.status](sel.v)}</p>`}
-      ${selFt != null && selFt !== zoneFt() && !['too-easy', 'too-hard'].includes(sel.v.status)
-        ? `<button class="btn small" data-action="set-zone" data-ft="${selFt}">Practise at ${fmtDist(selFt)}</button>` : ''}
+      ${selD != null ? advice({ d: selD, v: sel.v }) : `<p class="advice">${zoneMessages[sel.v.status](sel.v)}</p>`}
+      ${selD != null && selD !== zoneD && !['too-easy', 'too-hard'].includes(sel.v.status)
+        ? `<button class="btn small" data-action="set-zone" data-d="${selD}">Practise at ${fmtMark(selD)}</button>` : ''}
       ${lineChart(trend, { label: `Make percentage at ${sel.distance} ${u} per session`, target })}
     </section>
 
@@ -616,7 +621,7 @@ function viewSettings() {
   return subpage('Settings', `
     <section class="panel">
       <h3>Distances</h3>
-      <p class="muted small">Every distance in the app is shown in this unit, including routines written in the other one.</p>
+      <p class="muted small">Every distance in the app uses this unit. Routines written in the other one are putted at the nearest whole ${unit() === 'm' ? 'metre' : 'foot'}.</p>
       ${seg('unit', unit(), [['ft', 'Feet'], ['m', 'Metres']])}
     </section>
     <section class="panel">
@@ -660,7 +665,8 @@ function startRoutine(id) {
   if (r) startRoutineObj(r);
 }
 
-function startRoutineObj(r) {
+function startRoutineObj(saved) {
+  const r = S.routineIn(saved, unit()); // putt it at round distances in the display unit
   const putters = puttersPref();
   state.active = {
     routineId: r.id, routineName: r.name, kind: r.kind, unit: r.unit, startedAt: new Date().toISOString(),
@@ -714,7 +720,7 @@ const actions = {
     if (key === 'sessionPutters' && state.active) setSessionPutters(clampPutters(state.active.putters) + d);
     persist(); render();
   },
-  'set-zone': (el) => { state.settings.zoneFt = Number(el.dataset.ft); persist(); render(); },
+  'set-zone': (el) => { state.settings.zoneFt = S.toFt(Number(el.dataset.d), unit()); persist(); render(); },
   'set-setting': (el) => {
     const { key, value } = el.dataset;
     state.settings[key] = key === 'unit' ? value : Number(value);
@@ -792,9 +798,9 @@ const actions = {
     .insertAdjacentHTML('beforeend', stRow({ distance: '', putts: document.getElementById('routine-count').value === 'sets' ? 2 : 10 },
       document.querySelector('#routine-form [name=unit]').value)),
   'start-zone': () => {
-    const ft = zoneFt();
-    startRoutineObj({ id: `zone-${ft}`, name: `Zone practice · ${ft} ft`, kind: 'stations', unit: 'ft', count: 'sets',
-      stations: [{ distance: ft, sets: zoneSets() }] });
+    const d = zoneMark();
+    startRoutineObj({ id: `zone-${d}${unit() === 'm' ? 'm' : ''}`, name: `Zone practice · ${fmtMark(d)}`, kind: 'stations', unit: unit(), count: 'sets',
+      stations: [{ distance: d, sets: zoneSets() }] });
   },
   'row-del': (el) => {
     const table = el.closest('table');
