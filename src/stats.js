@@ -232,3 +232,34 @@ export const standardDistances = (unit) => (unit === 'm' ? STANDARD_M : STANDARD
 export function nearestStandard(value, unit) {
   return standardDistances(unit).reduce((best, d) => (Math.abs(d - value) < Math.abs(best - value) ? d : best));
 }
+
+/** The next standard distance (ft) further out (dir 1) or closer in (dir -1); null at the ends. */
+export function stepStandard(ft, dir) {
+  const i = STANDARD_FT.indexOf(ft);
+  return i < 0 ? null : STANDARD_FT[i + dir] ?? null;
+}
+
+/**
+ * Where to practise next, given a zone verdict at a standard distance: one mark
+ * back when it is clearly too easy, one mark in when clearly too hard, else
+ * null (stay put - including while the verdict is only "leaning").
+ */
+export function zoneMove(status, ft) {
+  if (status === 'too-easy') return stepStandard(ft, 1);
+  if (status === 'too-hard') return stepStandard(ft, -1);
+  return null;
+}
+
+/**
+ * Progress through a station session: putts logged against putts planned, per
+ * station and overall. Skipped stations count as finished so the bar keeps moving.
+ */
+export function sessionProgress(stations, log, stationIdx = 0) {
+  const parts = stations.map((st, i) => {
+    const done = Math.min(log[i]?.length || 0, st.putts);
+    return { putts: st.putts, done, fraction: i < stationIdx ? 1 : st.putts ? done / st.putts : 1 };
+  });
+  const total = parts.reduce((n, p) => n + p.putts, 0);
+  const done = parts.reduce((n, p) => n + p.putts * p.fraction, 0);
+  return { parts, total, fraction: total ? done / total : 0 };
+}

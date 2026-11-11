@@ -4,7 +4,7 @@
   "description": "Track disc golf putting routines and improvement.",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#f6f7f4",
-  "theme_color": "#1f6f4a",
+  "background_color": "#edf0ea",
+  "theme_color": "#17603f",
   "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
 }
