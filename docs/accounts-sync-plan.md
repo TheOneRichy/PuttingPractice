@@ -8,8 +8,12 @@ This document is a plan, not an implementation. It describes how accounts would
 fit the app as it exists today (vanilla ES modules, no build step, no
 dependencies, everything in one `localStorage` blob, static hosting on Vercel).
 
-Limits and product details for Supabase, Vercel and Google below were written
-from memory. Check them against the current docs during phase 2.
+An earlier version of this plan used Supabase; it is in this file's git history.
+
+**How sure this is.** Items marked *(verify)* come from memory or third-party
+pages and were not confirmed against the official docs, partly because
+`convex.dev` was not reachable while this was written. Phase 2 starts with a
+small proof that settles the important ones before anything is built on them.
 
 ---
 
@@ -17,46 +21,62 @@ from memory. Check them against the current docs during phase 2.
 
 | Question | Decision | Why |
 | --- | --- | --- |
-| Backend | **Supabase**, created from the Vercel Marketplace (project → Storage) | Login, Postgres and per-user security in one service, callable from the browser, managed from the existing Vercel account |
-| Login methods | **Google only** to start | No passwords to store, reset or leak |
+| Data and server logic | **Convex** | Database plus server functions in one service; every write passes through code that can validate it; ladders can update live |
+| Login | **Clerk**, Google only | A documented Convex login provider with a plain-JavaScript SDK; runs on a subdomain of our own domain, so Safari keeps the session; no passwords to store |
 | Is login required? | **No** | The app must keep working signed-out and offline exactly as it does now |
 | Source of truth on the device | **`localStorage`, as today** | Screens keep reading local state; the cloud is a replica that sync reconciles with |
 | Ladders | **Later phase, but the tables are shaped for them now** | Avoids a data migration when they arrive |
 
 Options considered and set aside:
 
-- **WorkOS AuthKit** – a good login product, but login only. It would still need
-  a database and a hand-written API.
-- **Convex (with WorkOS)** – workable and never pauses, but adds a deploy step,
-  two services, and has no SQL-style aggregation, so every ladder would need
-  hand-maintained running totals.
-- **Neon via Vercel + WorkOS + Vercel functions** – full control, but the whole
-  API and its security would be code in this repo.
+- **Supabase** – simpler (one service, no deploy step, ladders as SQL queries)
+  and still the fallback if the phase 2 proof fails.
+- **WorkOS AuthKit** – its browser SDK keeps the session in memory and restores
+  it from a cookie on WorkOS's domain, which Safari is expected to block. The
+  fix is a custom domain at $99 a month.
+- **Convex Auth** – beta and React-only.
+- **Google's sign-in button straight into Convex** – tokens last an hour and
+  silent renewal is unreliable on iPhone; fixing that means hand-written
+  session handling.
 
-Known cost of the choice: a free Supabase project pauses after about a week
-with no activity. Any request counts as activity, so a used app stays awake. If
-it ever pauses, signed-in users keep working locally and sync resumes when the
-project is restored.
+Known costs of the choice:
+
+- **The repo gains a backend.** A `convex/` folder of server functions, the
+  first entry in `package.json` dependencies, and a deploy step. The site itself
+  stays plain static files with no bundler.
+- **Two services** to set up and keep working together.
+- **Weekly re-sign-in.** Clerk's free plan fixes sessions at 7 days. Because the
+  app works signed-out, an expired session only pauses sync until the next
+  "Continue with Google"; no putts are lost.
+- **Free limits** *(verify)*: Convex about 1M function calls and 0.5 GB a month;
+  Clerk 50,000 users on its pricing page. Whether idle free Convex projects
+  pause was not confirmed.
 
 ---
 
 ## 2. What "safe" means here
 
-- **No passwords.** Google proves who the user is; Supabase issues the session.
+- **No passwords.** Google proves who the user is; Clerk issues the session.
 - **Minimal Google scopes.** `openid`, `email`, `profile` only. These need no
   Google security review.
-- **Row-level security on every table.** The Supabase key shipped in the browser
-  is public by design (like `FEEDBACK_KEY` and `ANALYTICS_KEY`); what protects
-  data is a policy on each table saying a signed-in user can only read and write
-  rows where `user_id` is their own id. A table without a policy is the one
-  mistake that would expose data, so phase 2 includes a test that signs in as
-  user A and confirms user B's rows are unreadable.
-- **No secret keys in the repo or the browser.** The service-role key is never
-  used by the app.
-- **Analytics stay anonymous.** PostHog is never told the email, name or
-  Supabase user id. At most it gets a `signed_in: true/false` property.
+- **Identity comes from the token, never from the request.** Convex has no
+  per-row security rules: every public function can be called by anyone who
+  knows the deployment URL. So every function goes through one `requireUser(ctx)`
+  helper that reads the caller from the verified Clerk token, and no function
+  accepts a user id as an argument. A function that skips the helper is the one
+  mistake that would expose data, so:
+  - a test signs in as user A and confirms user B's rows are unreadable and
+    unwritable through every function;
+  - a lint-style test fails if any exported function does not call the helper.
+- **No secret keys in the repo or the browser.** The Convex URL and the Clerk
+  publishable key are public by design (like `FEEDBACK_KEY` and
+  `ANALYTICS_KEY`). The Convex deploy key lives only in Vercel's settings.
+- **Emails stay in Clerk.** Convex stores the Clerk user id and, later, a chosen
+  display name. It never stores the email address.
+- **Analytics stay anonymous.** PostHog is never told the email, name or user
+  id. At most it gets a `signed_in: true/false` property.
 - **Users can leave.** Settings gets "Delete my account", which removes the
-  cloud rows and the login. Export JSON keeps working either way.
+  Convex rows and the Clerk login. Export JSON keeps working either way.
 
 ---
 
@@ -102,29 +122,37 @@ merges as a union so a deleted default stays deleted.
   change;
 - when the browser comes back online.
 
-Each run pushes local changes made since the last successful sync (tracked by a
-per-record `dirty` flag or a `lastSyncedAt` watermark), then pulls rows changed
-on the server since that watermark. A failed run changes nothing locally and is
-simply retried on the next trigger. Settings shows "Synced 2 min ago" or
-"Not synced, will retry", so a silent failure is visible, in the same spirit
-as the `[usage-stats]` console line.
+Each run calls one `push` function with local records changed since the last
+successful sync, then one `pull` function for rows the server has stamped since
+the device's watermark. The watermark uses a server-set timestamp, so device
+clocks cannot cause missed rows. Convex runs each function as a transaction, so
+a push either fully applies or does not apply at all. A failed run changes
+nothing locally and is retried on the next trigger.
+
+Sync is plain request and response. Convex's live subscriptions are not used
+for personal history, which keeps the app usable offline; they are saved for
+ladders.
+
+Settings shows "Synced 2 min ago", "Not synced, will retry" or "Sign in to
+resume sync", so a silent failure is visible, in the same spirit as the
+`[usage-stats]` console line.
 
 ### Edge cases
 
+- **Session expired (weekly on Clerk's free plan).** The app carries on locally
+  and queues changes. Signing in again runs a normal sync.
 - **A second person on the same browser.** Local data records the id of the
   account that owns it. If a different account signs in, the app does not merge;
   it sets the first person's data aside (still on the device, restored when they
   sign back in) and loads the new account's.
 - **Signing out.** Ask: keep this history on this device, or remove it from this
   device. The cloud copy is untouched either way.
-- **"Reset all data" while signed in.** Must say what it does. Proposed: two
-  explicit choices, "Clear this device" and "Delete everything, including my
-  cloud history".
+- **"Reset all data" while signed in.** Two explicit choices: "Clear this
+  device" and "Delete everything, including my cloud history".
 - **Import JSON while signed in.** Imported sessions merge by id and upload.
   They are marked as imported so ladders can exclude them (section 5).
 - **Clock skew.** `updatedAt` comes from the device clock. For one person's own
-  data, the rare wrong winner is acceptable. Ladders never trust device times
-  (section 5).
+  data, the rare wrong winner is acceptable. Ladders never trust device times.
 
 ---
 
@@ -144,29 +172,34 @@ sync:     { ownerId, lastSyncedAt }          // new top-level key
 Views filter out records with `deletedAt`. Old tombstones can be dropped after
 they have synced and aged (say 90 days).
 
-### Cloud (Postgres)
+### Cloud (Convex tables)
 
 ```
-profiles     user_id PK, display_name, ladder_opt_in, created_at
-sessions     (user_id, id) PK, date, kind, routine_name, source, score,
-             data jsonb,            -- sets, notes, pp360 stations: the full record
-             updated_at, deleted_at,
-             received_at            -- set by the server, never by the client
-putts        (user_id, session_id, ft) PK, makes, attempts
-             -- one row per distance per session, mirroring session.results
-routines     (user_id, id) PK, data jsonb, updated_at, deleted_at
-user_state   user_id PK, settings jsonb, updated_at
+users         clerkId, displayName?, ladderOptIn, createdAt
+              index: by clerkId
+sessions      userId, clientId, date, kind, routineName, source, score?,
+              results: [{ ft, makes, attempts }],
+              data,                 -- sets, notes, pp360 stations: the rest of the record
+              updatedAt, deletedAt?,
+              receivedAt,           -- set by the server on first arrival
+              serverStamp           -- set by the server on every write; the pull watermark
+              indexes: by (userId, clientId), by (userId, serverStamp)
+routines      userId, clientId, data, updatedAt, deletedAt?, serverStamp
+userState     userId, settings, updatedAt, serverStamp
+ladderTotals  userId, ft, window, makes, attempts      (phase 5)
+              indexes: by (ft, window), by (userId, window)
 ```
 
-`putts` is the part that exists for ladders. Private sync alone could store
-each session as a single JSON blob, but ranking needs makes and attempts per
-distance per user as real columns. Results are already stored in feet
-(`{ ft, attempts, makes }`), so they map straight onto it. A database constraint
-enforces `0 <= makes <= attempts`.
+Results are already stored in feet (`{ ft, attempts, makes }`), so they go in
+unchanged. The `push` function validates every session before storing it:
+`0 <= makes <= attempts`, distances from the standard list, a known `kind` and
+`source`, and a sane size.
 
-Every table has row-level security: owner can select, insert, update; nobody
-else can do anything. Ladders are exposed through views (section 5), never by
-loosening these policies.
+`ladderTotals` is what exists for ladders. Convex has no `GROUP BY`, so totals
+per player, distance and window are kept up to date by the same transaction
+that stores, edits or deletes a session. It is not needed until phase 5, and
+can be built then from the stored `results`, so nothing about private sync
+depends on it.
 
 ---
 
@@ -180,8 +213,12 @@ loosening these policies.
 - Later: JYLY and Perfect Putt 360 high scores, streaks, friend and club
   ladders, head-to-head challenges.
 
-Each is a SQL view or function over `putts` and `sessions`, returning only
-display name and totals. A new format is a new query, not new infrastructure.
+Each ladder is a Convex query over `ladderTotals` that returns only display
+names and totals, and the ladder screen subscribes to it so standings update
+live. At the size of a club, the query reads one distance and window and sorts
+it. If a ladder grows large, Convex's Aggregate component (pre-1.0 at the time
+of writing) provides ranked lookups without reading every row. A new format is
+new code: a totals field or table, the write-path update, and a query.
 
 ### Rules to fix before building
 
@@ -191,7 +228,7 @@ display name and totals. A new format is a new query, not new infrastructure.
 | Windows | This week, this month, all time |
 | Which sessions count | `source = 'live'` only, received by the server while signed in. Backdated "Log a past session" entries and imports stay in personal stats but not ladders |
 | Feet vs metres | Separate ladders. 33 ft and 10 m are not the same putt (32.8 ft), and results are stored in feet |
-| Windows are measured by | Server `received_at`, not the device's `date` |
+| Windows are measured by | Server `receivedAt`, not the device's `date` |
 | Joining | Opt-in, with a chosen display name. Private is the default |
 
 ### Honesty
@@ -199,7 +236,8 @@ display name and totals. A new format is a new query, not new infrastructure.
 Every putt is self-reported, so a ladder runs on the honour system and no
 backend changes that. What helps:
 
-- server-side sanity checks (plausible pace, no edits to old sessions counting);
+- server-side sanity checks in the `push` function (plausible pace, late edits
+  to old sessions not counting);
 - friend and club ladders first, where people know each other, before a global
   one;
 - a way to hide a player from a ladder;
@@ -209,27 +247,41 @@ backend changes that. What helps:
 
 ## 6. How it fits the existing code
 
-| File | Change |
+| Path | Change |
 | --- | --- |
 | `src/store.js` | `upgrade()` adds `updatedAt` / `source`; deletes become tombstones; new `sync` key |
-| `src/stats.js` | Pure `mergeState(local, remote)` and the session → `putts` rows mapping, with tests |
-| `src/sync.js` (new) | The only file that talks to Supabase: sign in/out, push, pull. Loaded on demand, like PostHog |
+| `src/stats.js` | Pure `mergeState(local, remote)` with tests; `CONVEX_URL` and `CLERK_KEY` next to the other public keys |
+| `src/sync.js` (new) | The only file that talks to Clerk and Convex: sign in/out, push, pull. Loaded on demand, like PostHog |
 | `src/app.js` | Account section in Settings, sync status, sign-out and reset prompts; mutations stamp `updatedAt` |
-| `supabase/` (new) | SQL for tables, policies and ladder views, kept in the repo |
-| `README.md`, Settings copy | "No accounts" and "stored only in this browser" become "optional account" wording; new privacy page |
+| `convex/` (new) | `schema`, `auth.config`, the `requireUser` helper, `sync` functions (push, pull, delete account); later `ladders` |
+| `tests/` | Merge tests (plain `node:test`); server function tests including the cross-user access test |
+| `package.json` | `convex` as a dependency, for the CLI and server functions only |
+| `README.md`, Settings copy | "No accounts, no server" and "stored only in this browser" become "optional account" wording; new privacy page |
 
-**The client library without a build step.** `supabase-js` is loaded as an ES
-module, pinned to an exact version. It is fetched only when the user opens the
-sign-in flow or is already signed in, so signed-out users load nothing new.
-Vendoring a copy into the repo is the alternative if a CDN dependency is
-unwanted.
+**The browser side stays build-free.** Convex publishes a browser bundle that
+loads from a script tag (confirmed in the published package, 1.50.0), and Clerk
+loads the same way. Both are pinned to exact versions and fetched only when the
+user opens sign-in or is already signed in, so signed-out users load nothing
+new. Functions are called by name (`convex.anyApi`), so no generated code is
+imported by the site.
 
-**Sign-in flow.** A redirect to Google and back to `putt.richyarthurs.com`.
-Preview deploys and `localhost` need their URLs added to the allowed redirect
-list, or sign-in is simply hidden there (as analytics is).
+**The glue** *(verify in the phase 2 proof)*: after `Clerk.load()`, the Convex
+client is given a callback that returns
+`Clerk.session.getToken({ template: 'convex' })`. No official example combines
+script-tag Clerk with script-tag Convex, though each half is documented.
 
-**Service worker.** There is none today, so nothing caches the auth redirect.
-If one is added later it must not intercept the callback.
+**Deploying.** Vercel's build command becomes `npx convex deploy`, with a Convex
+deploy key in Vercel's environment settings, so server functions ship with
+every push to `main` exactly as the site does. The README's "no deploy tokens to
+keep working" line stops being true and needs updating. CI gains the server
+tests.
+
+**Preview deploys and localhost.** These use a separate Convex development
+deployment and Clerk's development instance, or hide sign-in entirely (as
+analytics already does off the live domain). Decide in phase 2.
+
+**Service worker.** There is none today, so nothing interferes with the sign-in
+redirect. If one is added later it must not intercept it.
 
 ---
 
@@ -237,35 +289,39 @@ If one is added later it must not intercept the callback.
 
 Done once, by the project owner, in dashboards:
 
-1. Vercel → project → Storage → create a Supabase database (free plan).
-2. Google Cloud Console → create an OAuth client; consent screen with app name,
-   support email, link to the privacy page; publish it (basic scopes need no
-   review).
-3. Supabase → Authentication → enable Google with that client id and secret;
-   set the site URL and allowed redirect URLs.
-4. Run the SQL in `supabase/` to create tables and policies.
-5. Paste the Supabase project URL and public key into `src/stats.js` next to
-   the other public keys.
-
-By default Google's consent screen will name the Supabase project domain rather
-than `putt.richyarthurs.com`. Fixing that needs either Supabase's paid custom
-domain or Google's own sign-in button passing a token to Supabase. Decide in
-phase 2; it does not affect the data design.
+1. **Convex** – create a project; note the deployment URL; create a production
+   deploy key and add it to Vercel as an environment variable.
+2. **Clerk** – create an application with Google as the only sign-in method;
+   enable its Convex integration (this creates the `convex` token template).
+3. **Clerk production instance** – add the DNS records it lists for a subdomain
+   of `richyarthurs.com` *(verify that the free plan includes this)*.
+4. **Google Cloud Console** – create an OAuth client for production and give
+   its id and secret to Clerk (Clerk's shared Google credentials are for
+   development only *(verify)*). Consent screen: app name, support email, link
+   to the privacy page; publish it.
+5. **Convex** – set Clerk's issuer URL as an environment variable for
+   `auth.config`.
+6. Paste the Convex URL and Clerk publishable key into `src/stats.js`.
 
 ---
 
 ## 8. Phasing
 
 1. **Local groundwork.** `updatedAt`, `source`, tombstones, `mergeState` with
-   tests. Ships with no visible change and no backend.
-2. **Accounts and private sync.** Supabase setup, tables including `putts`,
-   policies, the cross-user access test, `src/sync.js`, Settings account
-   section.
-3. **Edge cases and wording.** Second-account handling, sign-out and reset
-   prompts, delete account, README and privacy page.
+   tests. Ships with no visible change and no backend. Identical whichever
+   backend is used.
+2. **Proof, then accounts and private sync.**
+   - *Proof first:* a throwaway page with script-tag Clerk and Convex that signs
+     in with Google, calls one authenticated function, and stays signed in
+     after a reload, tested in iPhone Safari and as a home-screen app. If this
+     fails, fall back to the Supabase plan before any more is built.
+   - Then: schema, `requireUser`, push and pull, the cross-user access test,
+     `src/sync.js`, the Settings account section, the Vercel deploy step.
+3. **Edge cases and wording.** Second-account handling, expired-session note,
+   sign-out and reset prompts, delete account, README and privacy page.
 4. **Profiles and opt-in.** Display name, ladder opt-in.
-5. **First ladders.** Most putts and best % per distance, starting with friend
-   or club groups.
+5. **First ladders.** `ladderTotals`, most putts and best % per distance,
+   starting with friend or club groups.
 6. **More formats.** Game high scores, challenges, verified tier.
 
 Phases 1 to 3 deliver "my history follows me". Each phase is shippable on its
@@ -275,9 +331,10 @@ own.
 
 ## 9. Open questions
 
-- Sign-in button: Supabase redirect (simplest) or Google's own button (shows
-  this site's domain on the consent screen)?
+- Is a weekly "Continue with Google" acceptable, or is a paid Clerk plan worth
+  it to lengthen sessions?
 - Should a brand-new visitor be invited to sign in, or only find it in Settings?
+- Do preview deploys get working sign-in, or is it live-site only?
 - Friend/club groups: invite link, or join by code?
 - Do edits to a saved session ("tap a logged result to correct it") stop
   counting for ladders after some time?
